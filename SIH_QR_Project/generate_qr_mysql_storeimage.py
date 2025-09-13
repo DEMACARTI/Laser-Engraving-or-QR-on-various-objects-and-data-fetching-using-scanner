@@ -34,8 +34,8 @@ DB_CONFIG = {
     "database": "sih_qr_db"
 }
 
-COMPONENT = "ERC"       # ERC / LINER / PAD / SLEEPER
-VENDOR = "V001"
+COMPONENT = "sleepers"       # ERC / LINER / PAD / SLEEPER
+VENDOR = "V010"
 LOT = "L2025-09"
 COUNT = 100             # how many QR to generate
 WARRANTY_YEARS = 5
