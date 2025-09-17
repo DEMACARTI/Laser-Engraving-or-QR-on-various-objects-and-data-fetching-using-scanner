@@ -1,0 +1,77 @@
+body, html, #root, .container {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #f7f7fa;
+}
+.container {
+  max-width: 600px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0001;
+  padding: 32px 24px 24px 24px;
+}
+h1 {
+  text-align: center;
+  color: #2a2a2a;
+  margin-bottom: 24px;
+}
+.qr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.qr-form label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+  color: #333;
+}
+.qr-form input, .qr-form select {
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+}
+.qr-form button {
+  margin-top: 12px;
+  padding: 10px 0;
+  background: #2d7ff9;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.qr-form button:disabled {
+  background: #b3c7f9;
+  cursor: not-allowed;
+}
+.results {
+  margin-top: 32px;
+}
+.results ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.results li {
+  background: #f3f6fa;
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 4px #0001;
+  text-align: center;
+}
+.results img {
+  margin-top: 8px;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #eee;
+}
