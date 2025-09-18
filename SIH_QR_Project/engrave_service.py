@@ -131,17 +131,12 @@ def mark_status(uid: str, status: str, location: str = "Laser", note: str = ""):
 # ---------------- Engraving single item ----------------
 def engrave_single(controller: LaserController, uid: str, qr_path: str = None):
     """
-    Basic engraving logic:
-    - mark_status(uid, 'Engraving')
-    - send a command like "ENGRAVE_UID <uid>" to controller
-    - interpret non-empty 'OK'-ish response as success
-    - mark_status(uid, 'Engraved' or 'Engrave_Failed')
-    If you use GRBL (Arduino+CNC shield), replace the controller commands with GRBL gcode flow.
+    Send engraving command for a UID.
+    IMPORTANT: this function DOES NOT update statuses in DB.
+    It only sends the command (simulate or real) and logs to console.
     """
     try:
-        mark_status(uid, "Engraving", note="Sent to laser")
-        # Choose command format here:
-        # If you later use GRBL mode, change to send movement + M3/M5 sequence instead.
+        # Command format used by worker
         if qr_path:
             cmd = f"ENGRAVE_FILE {qr_path} {uid}"
         else:
@@ -149,14 +144,20 @@ def engrave_single(controller: LaserController, uid: str, qr_path: str = None):
 
         resp = controller.send_command(cmd)
         resp_str = "" if resp is None else str(resp).strip()
-        if resp is None or resp_str == "" or resp_str.upper().startswith("ERR"):
-            mark_status(uid, "Engrave_Failed", note=f"resp={resp_str}")
-            return False
+
+        # Console-only log (no DB writes)
+        if controller.simulate:
+            print(f"[worker] simulated send -> {cmd} (resp={resp_str})")
         else:
-            mark_status(uid, "Engraved", note=f"resp={resp_str}")
-            return True
+            print(f"[worker] sent -> {cmd} (resp={resp_str})")
+
+        # Return True if controller returned something not empty/error-like
+        if resp is None or resp_str == "" or resp_str.upper().startswith("ERR"):
+            return False
+        return True
+
     except Exception as ex:
-        mark_status(uid, "Engrave_Failed", note=f"exception={ex}")
+        print(f"[worker] exception while engraving {uid}: {ex}")
         return False
 
 # ---------------- Worker loop (background) ----------------

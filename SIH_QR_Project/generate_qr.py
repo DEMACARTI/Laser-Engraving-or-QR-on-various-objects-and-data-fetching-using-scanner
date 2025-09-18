@@ -19,10 +19,10 @@ OUTPUT_DIR = Path("qr_batch_output")  # Folder to save QR codes
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 CSV_FILE = OUTPUT_DIR / "qr_metadata.csv"  # Metadata storage file
-COMPONENT = "ERC"       # Options: ERC, LINER, PAD, SLEEPER
-VENDOR = "V001"         # Vendor code
+COMPONENT = "PAD"       # Options: ERC, LINER, PAD, SLEEPER
+VENDOR = "V0300"         # Vendor code
 LOT = "L2025-09"        # Lot/Batch identifier
-COUNT = 20             # Number of QR codes to generate (increase as needed, e.g., 1000)
+COUNT = 43             # Number of QR codes to generate (increase as needed, e.g., 1000)
 WARRANTY_YEARS = 5      # Example warranty
 # ----------------------------------------
 
