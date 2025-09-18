@@ -1,19 +1,19 @@
 """
 engrave_service.py
 
-Single-file Flask + background worker to:
-- fetch UIDs from your MySQL `items` table (using latest status from `statuses`)
-- send engraving commands serial-wise to a laser controller
-- wait admin-configurable delay_seconds between each send
-- support simulate mode, pause/resume/stop, and status monitoring
+Flask + background worker for engraving workflow.
 
-DB assumptions (from your generator script):
-- items table: columns uid, qr_path, qr_image, ...
-- statuses table: (id, uid, status, location, note, updated_at)
-  - 'latest' status per uid is determined by max(updated_at).
-
-Test first in simulate mode!
+Features:
+- Fetch UIDs from MySQL (latest status = Manufactured) and queue them sequentially.
+- Worker sends engraving commands serial-wise:
+    - simulate=True -> prints simulated sends
+    - simulate=False -> uses GRBLController (pyserial) to send GRBL commands (M3/M5/G0/G4 etc.)
+- Worker DOES NOT update 'Engraving'/'Engraved' statuses in DB.
+- Provides endpoints: /engrave/start, /engrave/status, /engrave/pause, /engrave/resume, /engrave/stop
+- Appends audit rows to engrave_log.csv for every attempted send (no DB writes).
+- Safe pause/resume/stop and basic error handling.
 """
+
 import os
 import time
 import threading
@@ -21,9 +21,10 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import mysql.connector
 
-# Optional hardware lib
+# Optional hardware lib - used only when simulate=False
 try:
     import serial
+    import serial.tools.list_ports
 except Exception:
     serial = None
 
@@ -36,10 +37,12 @@ DB_CONFIG = {
     'database': os.environ.get('DB_NAME', 'sih_qr_db')
 }
 
-LASER_SERIAL = os.environ.get('LASER_SERIAL', '/dev/ttyUSB0')  # or COM3
+# default serial (override with env LASER_SERIAL before running real jobs)
+LASER_SERIAL = os.environ.get('LASER_SERIAL', None)  # e.g. "COM3" on Windows
 LASER_BAUD = int(os.environ.get('LASER_BAUD', '115200'))
 
 DEFAULT_DELAY = float(os.environ.get('DEFAULT_DELAY', '6.0'))
+AUDIT_CSV = os.environ.get('ENGRAVE_LOG', 'engrave_log.csv')
 
 # ---------------- Worker state ----------------
 _worker_thread = None
@@ -52,23 +55,108 @@ _current_job = None  # {'uids':[{'uid','qr_path'}], 'delay':x, 'simulate':bool, 
 def get_db_conn():
     return mysql.connector.connect(**DB_CONFIG)
 
-# ---------------- Laser controller wrapper ----------------
+# ---------------- Simple audit log (CSV) ----------------
+def audit_log(uid: str, result: str):
+    try:
+        ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        line = f"{ts},{uid},{result}\n"
+        with open(AUDIT_CSV, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as e:
+        print("audit_log error:", e)
+
+# ---------------- GRBL Controller (for real hardware) ----------------
+class GRBLController:
+    """
+    Minimal GRBL wrapper using pyserial.
+    - If simulate=True, prints actions instead of opening serial.
+    - send_line waits for 'ok' or 'error' by default.
+    """
+    def __init__(self, port=None, baud=115200, simulate=True, timeout=3.0):
+        self.port = port
+        self.baud = int(baud)
+        self.simulate = bool(simulate)
+        self.timeout = float(timeout)
+        self.ser = None
+
+    @staticmethod
+    def list_ports():
+        if serial is None:
+            return []
+        return [p.device for p in serial.tools.list_ports.comports()]
+
+    def open(self):
+        if self.simulate:
+            print("[GRBL] simulate open")
+            return
+        if serial is None:
+            raise RuntimeError("pyserial not available; install pyserial to use hardware mode.")
+        if not self.port:
+            raise RuntimeError("No serial port provided for GRBLController (set LASER_SERIAL).")
+        # open serial port
+        self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
+        time.sleep(1.0)  # let controller initialize
+        try:
+            self.ser.reset_input_buffer(); self.ser.reset_output_buffer()
+        except Exception:
+            pass
+
+    def send_line(self, line: str, wait_ok: bool = True, timeout: float = None):
+        """
+        Send one line to GRBL. Returns list of response lines.
+        If simulate, returns ['ok'].
+        """
+        if timeout is None:
+            timeout = self.timeout
+        line_out = (line.strip() + "\n")
+        if self.simulate:
+            print(f"[SIM GRBL] -> {line_out.strip()}")
+            time.sleep(0.03)
+            return ["ok"]
+        # real serial
+        self.ser.write(line_out.encode('utf-8'))
+        self.ser.flush()
+        if not wait_ok:
+            return []
+        end = time.time() + timeout
+        lines = []
+        while time.time() < end:
+            raw = self.ser.readline().decode('utf-8', errors='ignore').strip()
+            if not raw:
+                continue
+            lines.append(raw)
+            if raw.lower().startswith("ok") or raw.lower().startswith("error"):
+                break
+        return lines
+
+    def close(self):
+        if self.simulate:
+            print("[GRBL] simulate close")
+            return
+        try:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+        except Exception:
+            pass
+
+# ---------------- Legacy simple LaserController (kept for backwards compatibility) ----------------
 class LaserController:
     """
-    Simpler wrapper:
-    - simulate=True -> print commands and return immediate OK
-    - simulate=False -> open pyserial to LASER_SERIAL and send lines
-    Adjust send_command() if your laser expects G-code or file-transfer.
+    Simple wrapper that either simulates or writes ASCII commands to a serial port.
+    Kept for compatibility with older flows that expect 'ENGRAVE_UID' ascii commands.
+    For GRBL-based hardware use GRBLController instead.
     """
     def __init__(self, simulate=True, port=LASER_SERIAL, baud=LASER_BAUD, timeout=2):
         self.simulate = bool(simulate)
         self.port = port
-        self.baud = baud
+        self.baud = int(baud)
         self.timeout = timeout
         self.ser = None
         if not self.simulate:
             if serial is None:
                 raise RuntimeError("pyserial not available; install pyserial to use real hardware.")
+            if not self.port:
+                raise RuntimeError("LASER_SERIAL not set; set env LASER_SERIAL to COM port.")
             self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
             time.sleep(1)
             try:
@@ -77,21 +165,13 @@ class LaserController:
                 pass
 
     def send_command(self, cmd: str):
-        """
-        Send a textual command. Adapt formatting per your device:
-        - For simple ASCII protocol: send 'ENGRAVE_UID <uid>'
-        - For GRBL: send G-code lines (see earlier guidance)
-        """
         if self.simulate:
             print(f"[SIM] -> {cmd}")
-            # fake brief processing
-            time.sleep(0.15)
+            time.sleep(0.12)
             return "OK"
-        # real hardware
         payload = (cmd + "\n").encode('utf-8')
         self.ser.write(payload)
         self.ser.flush()
-        # try read a line response (may be 'ok' / 'error' / custom)
         try:
             resp = self.ser.readline().decode('utf-8').strip()
             return resp
@@ -105,11 +185,11 @@ class LaserController:
             except Exception:
                 pass
 
-# ---------------- DB status update (matches your generator schema) ----------------
-def mark_status(uid: str, status: str, location: str = "Laser", note: str = ""):
+# ---------------- DB status helper (kept for UI-triggered updates) ----------------
+def mark_status(uid: str, status: str, location: str = "System", note: str = ""):
     """
-    Insert new row in statuses (uid,status,location,note,updated_at).
-    NOTE: We do NOT modify items table in this script; statuses table is the canonical source.
+    Insert a status row into statuses table.
+    This is intended for use by the frontend when users scan QRs and select stages.
     """
     conn = None
     try:
@@ -128,36 +208,66 @@ def mark_status(uid: str, status: str, location: str = "Laser", note: str = ""):
         if conn:
             conn.close()
 
-# ---------------- Engraving single item ----------------
-def engrave_single(controller: LaserController, uid: str, qr_path: str = None):
+# ---------------- Engraving single item flows ----------------
+def engrave_single_ascii(controller: LaserController, uid: str, qr_path: str = None):
     """
-    Send engraving command for a UID.
-    IMPORTANT: this function DOES NOT update statuses in DB.
-    It only sends the command (simulate or real) and logs to console.
+    Backwards-compat ASCII command sender (ENGRAVE_UID ...).
+    Used for simulated or simple controller flows.
     """
     try:
-        # Command format used by worker
         if qr_path:
             cmd = f"ENGRAVE_FILE {qr_path} {uid}"
         else:
             cmd = f"ENGRAVE_UID {uid}"
-
         resp = controller.send_command(cmd)
         resp_str = "" if resp is None else str(resp).strip()
-
-        # Console-only log (no DB writes)
         if controller.simulate:
             print(f"[worker] simulated send -> {cmd} (resp={resp_str})")
         else:
             print(f"[worker] sent -> {cmd} (resp={resp_str})")
-
-        # Return True if controller returned something not empty/error-like
-        if resp is None or resp_str == "" or resp_str.upper().startswith("ERR"):
-            return False
-        return True
-
+        success = not (resp is None or resp_str == "" or resp_str.upper().startswith("ERR"))
+        audit_log(uid, "OK" if success else f"ERR:{resp_str}")
+        return success
     except Exception as ex:
         print(f"[worker] exception while engraving {uid}: {ex}")
+        audit_log(uid, f"EXC:{ex}")
+        return False
+
+def engrave_single_grbl(controller: GRBLController, uid: str, qr_path: str = None,
+                        laser_s: int = 200, dwell_ms: int = 300, x: float = 10.0, y: float = 10.0, feed: int = 1000):
+    """
+    Simple GRBL-based engraving routine:
+    - $X unlock, G21, G90, move to X,Y, M3 S<val>, G4 P<ms>, M5, M400
+    - controller: GRBLController instance (opened).
+    - Tune x,y,laser_s,dwell_ms/feed values for your fixture and laser power.
+    """
+    try:
+        controller.send_line("$X")    # unlock
+        controller.send_line("G21")   # mm
+        controller.send_line("G90")   # absolute coords
+        controller.send_line("M5")    # ensure laser off
+
+        # Move to start
+        controller.send_line(f"G0 X{x:.3f} Y{y:.3f} F6000")
+        controller.send_line("G4 P100", wait_ok=False)
+
+        # Laser ON
+        controller.send_line(f"M3 S{int(laser_s)}")
+        # dwell to burn
+        controller.send_line(f"G4 P{int(dwell_ms)}")
+        # Laser OFF
+        controller.send_line("M5")
+        # wait for moves complete
+        controller.send_line("M400")
+        audit_log(uid, "OK")
+        if controller.simulate:
+            print(f"[worker] simulated GRBL send for {uid} (S={laser_s},dwell={dwell_ms}ms) at ({x},{y})")
+        else:
+            print(f"[worker] GRBL send for {uid} OK (S={laser_s},dwell={dwell_ms}ms) at ({x},{y})")
+        return True
+    except Exception as ex:
+        print(f"[worker] GRBL exception while engraving {uid}: {ex}")
+        audit_log(uid, f"GRBL_EXC:{ex}")
         return False
 
 # ---------------- Worker loop (background) ----------------
@@ -176,14 +286,27 @@ def _worker_loop():
         uids = job.get('uids', [])
         pos = int(job.get('pos', 0))
 
-        # open controller once per job
+        # choose controller based on simulate flag and availability
+        controller = None
         try:
-            controller = LaserController(simulate=simulate)
+            if simulate:
+                controller = LaserController(simulate=True)
+                controller.opened_as = "ascii_sim"
+            else:
+                # Use GRBLController for real hardware
+                port = os.environ.get('LASER_SERIAL', LASER_SERIAL)
+                baud = int(os.environ.get('LASER_BAUD', LASER_BAUD))
+                grbl = GRBLController(port=port, baud=baud, simulate=False)
+                grbl.open()
+                controller = grbl
+                controller.opened_as = "grbl"
         except Exception as e:
             print("Cannot open controller:", e)
+            # clear job so admin can restart after fixing hardware/config
             with _worker_lock:
                 _current_job = None
-            break
+            time.sleep(1)
+            continue
 
         try:
             while pos < len(uids) and not _stop_flag.is_set():
@@ -197,7 +320,17 @@ def _worker_loop():
                 uid = entry.get('uid')
                 qr_path = entry.get('qr_path')
                 print(f"[engrave_worker] ({pos+1}/{len(uids)}) engraving {uid}")
-                _ok = engrave_single(controller, uid, qr_path)
+
+                # route to correct engrave flow
+                success = False
+                if getattr(controller, "opened_as", "") == "grbl":
+                    # You can compute per-index coordinates here if you have fixture mapping
+                    success = engrave_single_grbl(controller, uid, qr_path,
+                                                  laser_s=220, dwell_ms=350, x=10.0, y=10.0)
+                else:
+                    # fallback ascii/simulated flow
+                    lc = LaserController(simulate=simulate)
+                    success = engrave_single_ascii(lc, uid, qr_path)
 
                 # update progress
                 with _worker_lock:
@@ -205,7 +338,7 @@ def _worker_loop():
                         _current_job['pos'] = pos + 1
                 pos += 1
 
-                # wait delay with small sleep so we can pause/stop quickly
+                # wait delay in small increments to allow pause/stop
                 waited = 0.0
                 while waited < delay:
                     if _stop_flag.is_set() or _pause_flag.is_set():
@@ -214,7 +347,11 @@ def _worker_loop():
 
             print("[engrave_worker] job finished/stop detected")
         finally:
-            controller.close()
+            try:
+                if controller:
+                    controller.close()
+            except Exception:
+                pass
             with _worker_lock:
                 _current_job = None
     print("[engrave_worker] exiting")
@@ -241,7 +378,6 @@ def start_job_from_uids(uids_list, delay_seconds=None, simulate=True):
     if _worker_thread is None or not _worker_thread.is_alive():
         t = threading.Thread(target=_worker_loop, daemon=True)
         t.start()
-        # store reference (so stop/pause can be used)
         globals()['_worker_thread'] = t
     return True
 
