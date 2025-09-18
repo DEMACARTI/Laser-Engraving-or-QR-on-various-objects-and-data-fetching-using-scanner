@@ -1,17 +1,15 @@
 """
 engrave_service.py
 
-Flask + background worker for engraving workflow.
+Full updated file (ready-to-run).
 
 Features:
-- Fetch UIDs from MySQL (latest status = Manufactured) and queue them sequentially.
-- Worker sends engraving commands serial-wise:
-    - simulate=True -> prints simulated sends
-    - simulate=False -> uses GRBLController (pyserial) to send GRBL commands (M3/M5/G0/G4 etc.)
-- Worker DOES NOT update 'Engraving'/'Engraved' statuses in DB.
-- Provides endpoints: /engrave/start, /engrave/status, /engrave/pause, /engrave/resume, /engrave/stop
-- Appends audit rows to engrave_log.csv for every attempted send (no DB writes).
-- Safe pause/resume/stop and basic error handling.
+- Flask API endpoints for engraving control (start/pause/resume/stop/status).
+- Endpoints for mobile app: update_status, items/manufactured.
+- Optional append-to-running-job endpoint.
+- Worker sends engraving commands sequentially (simulate or GRBL).
+- Worker does NOT update statuses in DB (user-driven updates only).
+- Audit CSV (engrave_log.csv) records each send attempt.
 """
 
 import os
@@ -19,9 +17,10 @@ import time
 import threading
 from datetime import datetime
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import mysql.connector
 
-# Optional hardware lib - used only when simulate=False
+# Optional pyserial for hardware mode
 try:
     import serial
     import serial.tools.list_ports
@@ -37,8 +36,8 @@ DB_CONFIG = {
     'database': os.environ.get('DB_NAME', 'sih_qr_db')
 }
 
-# default serial (override with env LASER_SERIAL before running real jobs)
-LASER_SERIAL = os.environ.get('LASER_SERIAL', None)  # e.g. "COM3" on Windows
+# Serial port settings; set LASER_SERIAL="COM3" (Windows) or "/dev/ttyUSB0" (Linux) in env for real hardware
+LASER_SERIAL = os.environ.get('LASER_SERIAL', None)
 LASER_BAUD = int(os.environ.get('LASER_BAUD', '115200'))
 
 DEFAULT_DELAY = float(os.environ.get('DEFAULT_DELAY', '6.0'))
@@ -51,11 +50,15 @@ _stop_flag = threading.Event()
 _pause_flag = threading.Event()
 _current_job = None  # {'uids':[{'uid','qr_path'}], 'delay':x, 'simulate':bool, 'pos':int}
 
+# ---------------- Flask app + CORS ----------------
+app = Flask(__name__)
+CORS(app)  # DEV: allow all origins; tighten in production
+
 # ---------------- DB helper ----------------
 def get_db_conn():
     return mysql.connector.connect(**DB_CONFIG)
 
-# ---------------- Simple audit log (CSV) ----------------
+# ---------------- Audit CSV helper ----------------
 def audit_log(uid: str, result: str):
     try:
         ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
@@ -69,8 +72,7 @@ def audit_log(uid: str, result: str):
 class GRBLController:
     """
     Minimal GRBL wrapper using pyserial.
-    - If simulate=True, prints actions instead of opening serial.
-    - send_line waits for 'ok' or 'error' by default.
+    If simulate=True, prints actions instead of opening serial.
     """
     def __init__(self, port=None, baud=115200, simulate=True, timeout=3.0):
         self.port = port
@@ -93,19 +95,14 @@ class GRBLController:
             raise RuntimeError("pyserial not available; install pyserial to use hardware mode.")
         if not self.port:
             raise RuntimeError("No serial port provided for GRBLController (set LASER_SERIAL).")
-        # open serial port
         self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
-        time.sleep(1.0)  # let controller initialize
+        time.sleep(1.0)
         try:
             self.ser.reset_input_buffer(); self.ser.reset_output_buffer()
         except Exception:
             pass
 
     def send_line(self, line: str, wait_ok: bool = True, timeout: float = None):
-        """
-        Send one line to GRBL. Returns list of response lines.
-        If simulate, returns ['ok'].
-        """
         if timeout is None:
             timeout = self.timeout
         line_out = (line.strip() + "\n")
@@ -113,7 +110,6 @@ class GRBLController:
             print(f"[SIM GRBL] -> {line_out.strip()}")
             time.sleep(0.03)
             return ["ok"]
-        # real serial
         self.ser.write(line_out.encode('utf-8'))
         self.ser.flush()
         if not wait_ok:
@@ -139,12 +135,11 @@ class GRBLController:
         except Exception:
             pass
 
-# ---------------- Legacy simple LaserController (kept for backwards compatibility) ----------------
+# ---------------- Simple ASCII LaserController (backwards compat) ----------------
 class LaserController:
     """
-    Simple wrapper that either simulates or writes ASCII commands to a serial port.
-    Kept for compatibility with older flows that expect 'ENGRAVE_UID' ascii commands.
-    For GRBL-based hardware use GRBLController instead.
+    Simple wrapper to send ASCII commands (ENGRAVE_UID ...).
+    For GRBL-based hardware use GRBLController.
     """
     def __init__(self, simulate=True, port=LASER_SERIAL, baud=LASER_BAUD, timeout=2):
         self.simulate = bool(simulate)
@@ -181,15 +176,16 @@ class LaserController:
     def close(self):
         if self.ser:
             try:
-                if self.ser.is_open: self.ser.close()
+                if self.ser.is_open:
+                    self.ser.close()
             except Exception:
                 pass
 
-# ---------------- DB status helper (kept for UI-triggered updates) ----------------
+# ---------------- DB status helper (for UI-driven updates) ----------------
 def mark_status(uid: str, status: str, location: str = "System", note: str = ""):
     """
-    Insert a status row into statuses table.
-    This is intended for use by the frontend when users scan QRs and select stages.
+    Insert a status row into statuses table (uid, status, location, note, updated_at).
+    Used by mobile app / frontend when user scans and selects a stage.
     """
     conn = None
     try:
@@ -204,15 +200,16 @@ def mark_status(uid: str, status: str, location: str = "System", note: str = "")
         print("DB error in mark_status:", e)
         if conn:
             conn.rollback()
+        raise
     finally:
         if conn:
             conn.close()
 
-# ---------------- Engraving single item flows ----------------
+# ---------------- Engraving single item (no DB writes) ----------------
 def engrave_single_ascii(controller: LaserController, uid: str, qr_path: str = None):
     """
-    Backwards-compat ASCII command sender (ENGRAVE_UID ...).
-    Used for simulated or simple controller flows.
+    ASCII-style command sender (ENGRAVE_UID or ENGRAVE_FILE).
+    Records audit_log but does NOT write statuses into DB.
     """
     try:
         if qr_path:
@@ -236,10 +233,8 @@ def engrave_single_ascii(controller: LaserController, uid: str, qr_path: str = N
 def engrave_single_grbl(controller: GRBLController, uid: str, qr_path: str = None,
                         laser_s: int = 200, dwell_ms: int = 300, x: float = 10.0, y: float = 10.0, feed: int = 1000):
     """
-    Simple GRBL-based engraving routine:
-    - $X unlock, G21, G90, move to X,Y, M3 S<val>, G4 P<ms>, M5, M400
-    - controller: GRBLController instance (opened).
-    - Tune x,y,laser_s,dwell_ms/feed values for your fixture and laser power.
+    GRBL-based engraving routine (simple dwell at XY).
+    Tune x,y,laser_s,dwell_ms for your fixture.
     """
     try:
         controller.send_line("$X")    # unlock
@@ -247,18 +242,14 @@ def engrave_single_grbl(controller: GRBLController, uid: str, qr_path: str = Non
         controller.send_line("G90")   # absolute coords
         controller.send_line("M5")    # ensure laser off
 
-        # Move to start
         controller.send_line(f"G0 X{x:.3f} Y{y:.3f} F6000")
         controller.send_line("G4 P100", wait_ok=False)
 
-        # Laser ON
         controller.send_line(f"M3 S{int(laser_s)}")
-        # dwell to burn
         controller.send_line(f"G4 P{int(dwell_ms)}")
-        # Laser OFF
         controller.send_line("M5")
-        # wait for moves complete
         controller.send_line("M400")
+
         audit_log(uid, "OK")
         if controller.simulate:
             print(f"[worker] simulated GRBL send for {uid} (S={laser_s},dwell={dwell_ms}ms) at ({x},{y})")
@@ -286,14 +277,13 @@ def _worker_loop():
         uids = job.get('uids', [])
         pos = int(job.get('pos', 0))
 
-        # choose controller based on simulate flag and availability
+        # open controller based on simulate flag
         controller = None
         try:
             if simulate:
                 controller = LaserController(simulate=True)
                 controller.opened_as = "ascii_sim"
             else:
-                # Use GRBLController for real hardware
                 port = os.environ.get('LASER_SERIAL', LASER_SERIAL)
                 baud = int(os.environ.get('LASER_BAUD', LASER_BAUD))
                 grbl = GRBLController(port=port, baud=baud, simulate=False)
@@ -302,7 +292,7 @@ def _worker_loop():
                 controller.opened_as = "grbl"
         except Exception as e:
             print("Cannot open controller:", e)
-            # clear job so admin can restart after fixing hardware/config
+            # clear job and allow admin to fix and restart
             with _worker_lock:
                 _current_job = None
             time.sleep(1)
@@ -310,7 +300,7 @@ def _worker_loop():
 
         try:
             while pos < len(uids) and not _stop_flag.is_set():
-                # pause handling
+                # handle pause
                 while _pause_flag.is_set() and not _stop_flag.is_set():
                     time.sleep(0.3)
                 if _stop_flag.is_set():
@@ -321,24 +311,25 @@ def _worker_loop():
                 qr_path = entry.get('qr_path')
                 print(f"[engrave_worker] ({pos+1}/{len(uids)}) engraving {uid}")
 
-                # route to correct engrave flow
+                # route to appropriate engrave function
                 success = False
                 if getattr(controller, "opened_as", "") == "grbl":
-                    # You can compute per-index coordinates here if you have fixture mapping
                     success = engrave_single_grbl(controller, uid, qr_path,
                                                   laser_s=220, dwell_ms=350, x=10.0, y=10.0)
                 else:
-                    # fallback ascii/simulated flow
+                    # ascii flow (simulate or simple ASCII controller)
+                    # create a LaserController instance for ascii operations (simulated or real ASCII)
                     lc = LaserController(simulate=simulate)
                     success = engrave_single_ascii(lc, uid, qr_path)
+                    lc.close()
 
-                # update progress
+                # update in-memory progress
                 with _worker_lock:
                     if _current_job:
                         _current_job['pos'] = pos + 1
                 pos += 1
 
-                # wait delay in small increments to allow pause/stop
+                # wait delay with small increments so pause/stop is responsive
                 waited = 0.0
                 while waited < delay:
                     if _stop_flag.is_set() or _pause_flag.is_set():
@@ -356,9 +347,8 @@ def _worker_loop():
                 _current_job = None
     print("[engrave_worker] exiting")
 
-# ---------------- Public API for worker control ----------------
+# ---------------- Job control functions ----------------
 def start_job_from_uids(uids_list, delay_seconds=None, simulate=True):
-    """Start a job from an explicit list of uids (strings or dicts)."""
     global _worker_thread, _current_job, _stop_flag
     if isinstance(uids_list, list) and uids_list and isinstance(uids_list[0], str):
         uids_list = [{'uid': x, 'qr_path': None} for x in uids_list]
@@ -374,7 +364,6 @@ def start_job_from_uids(uids_list, delay_seconds=None, simulate=True):
             'pos': 0
         }
     _stop_flag.clear()
-    # spawn worker thread
     if _worker_thread is None or not _worker_thread.is_alive():
         t = threading.Thread(target=_worker_loop, daemon=True)
         t.start()
@@ -382,15 +371,10 @@ def start_job_from_uids(uids_list, delay_seconds=None, simulate=True):
     return True
 
 def start_job_from_db_query(limit=50, where_clause="latest.status = 'Manufactured'", order_by="i.uid", delay_seconds=None, simulate=True):
-    """
-    Convenience: select items whose latest status is 'Manufactured' using a JOIN subquery,
-    return first `limit` rows ordered by order_by.
-    """
-    # Query to find latest status per uid and join to items
     sql = f"""
     SELECT i.uid, i.qr_path FROM items i
     JOIN (
-      SELECT s1.uid, s1.status FROM statuses s1
+      SELECT s1.uid, s1.updated_at FROM statuses s1
       JOIN (
         SELECT uid, MAX(updated_at) AS mu FROM statuses GROUP BY uid
       ) s2 ON s1.uid = s2.uid AND s1.updated_at = s2.mu
@@ -427,22 +411,31 @@ def get_status():
         job = None if _current_job is None else _current_job.copy()
     if not job:
         return {'status': 'idle'}
-    return {'status': 'running', 'total': len(job.get('uids',[])), 'done': int(job.get('pos',0)), 'delay': float(job.get('delay', DEFAULT_DELAY)), 'simulate': bool(job.get('simulate', True))}
+    return {
+        'status': 'running',
+        'total': len(job.get('uids', [])),
+        'done': int(job.get('pos', 0)),
+        'delay': float(job.get('delay', DEFAULT_DELAY)),
+        'simulate': bool(job.get('simulate', True))
+    }
 
-# ---------------- Flask API (control) ----------------
-app = Flask(__name__)
+# ---------------- Append helper (optional) ----------------
+def append_uids_to_current_job(uids_list):
+    global _current_job
+    if isinstance(uids_list, list) and uids_list and isinstance(uids_list[0], str):
+        uids_list = [{'uid': x, 'qr_path': None} for x in uids_list]
+    with _worker_lock:
+        if not _current_job:
+            raise RuntimeError("no job is currently running")
+        _current_job['uids'].extend(uids_list)
+    return True
 
+# ---------------- Flask API endpoints ----------------
 @app.route('/engrave/start', methods=['POST'])
 def api_engrave_start():
-    """
-    Start job: body can contain:
-    1) "uids": ["UID-1","UID-2",...]  OR
-    2) "query": {"limit":50, "where":"latest.status = 'Manufactured'","order_by":"i.uid"}
-    Also include "delay_seconds" and "simulate" booleans.
-    """
     body = request.get_json(force=True)
     if not body:
-        return jsonify({"error":"missing json"}), 400
+        return jsonify({"error": "missing json"}), 400
     delay = body.get('delay_seconds', None)
     simulate = bool(body.get('simulate', True))
     uids = body.get('uids', None)
@@ -463,7 +456,7 @@ def api_engrave_start():
         except Exception as e:
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True, "mode": "query", "limit": limit, "simulate": simulate})
-    return jsonify({"error":"provide 'uids' or 'query' in body"}), 400
+    return jsonify({"error": "provide 'uids' or 'query' in body"}), 400
 
 @app.route('/engrave/stop', methods=['POST'])
 def api_engrave_stop():
@@ -473,20 +466,72 @@ def api_engrave_stop():
 @app.route('/engrave/pause', methods=['POST'])
 def api_engrave_pause():
     pause_job()
-    return jsonify({"ok": True, "action":"paused"})
+    return jsonify({"ok": True, "action": "paused"})
 
 @app.route('/engrave/resume', methods=['POST'])
 def api_engrave_resume():
     resume_job()
-    return jsonify({"ok": True, "action":"resumed"})
+    return jsonify({"ok": True, "action": "resumed"})
 
 @app.route('/engrave/status', methods=['GET'])
 def api_engrave_status():
     return jsonify(get_status())
 
+@app.route('/engrave/append', methods=['POST'])
+def api_engrave_append():
+    body = request.get_json(force=True)
+    uids = body.get('uids')
+    if not uids or not isinstance(uids, list):
+        return jsonify({"error": "provide 'uids' list"}), 400
+    try:
+        append_uids_to_current_job(uids)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": "append failed: " + str(e)}), 500
+    return jsonify({"ok": True, "appended": len(uids)})
+
+# Mobile / UI status update endpoint
+@app.route('/update_status', methods=['POST'])
+def api_update_status():
+    body = request.get_json(force=True)
+    uid = body.get('uid')
+    status = body.get('status')
+    location = body.get('location', 'MobileApp')
+    note = body.get('note', '')
+    if not uid or not status:
+        return jsonify({"error": "provide uid and status"}), 400
+    try:
+        mark_status(uid, status, location, note)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True})
+
+# Endpoint to list Manufactured items
+@app.route('/items/manufactured', methods=['GET'])
+def api_manufactured():
+    limit = int(request.args.get('limit', 100))
+    conn = get_db_conn()
+    cur = conn.cursor(dictionary=True)
+    sql = """
+      SELECT i.uid, i.qr_path FROM items i
+      JOIN (
+        SELECT s1.uid, s1.updated_at FROM statuses s1
+        JOIN (SELECT uid, MAX(updated_at) AS mu FROM statuses GROUP BY uid) s2
+        ON s1.uid = s2.uid AND s1.updated_at = s2.mu
+      ) latest ON latest.uid = i.uid
+      WHERE latest.status='Manufactured'
+      ORDER BY i.uid
+      LIMIT %s
+    """
+    cur.execute(sql, (limit,))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return jsonify(rows)
+
 # ---------------- Run server ----------------
 if __name__ == '__main__':
-    # debug-run
     print("Starting engrave_service (Flask + background worker support).")
     print("DB:", DB_CONFIG['host'], DB_CONFIG['database'])
+    # Note: host 0.0.0.0 allows mobile devices on LAN to reach this machine.
     app.run(host='0.0.0.0', port=5000, debug=True)

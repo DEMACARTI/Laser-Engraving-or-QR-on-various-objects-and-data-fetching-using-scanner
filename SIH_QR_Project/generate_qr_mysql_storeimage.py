@@ -35,9 +35,9 @@ DB_CONFIG = {
 }
 
 COMPONENT = "PAD"       # ERC / LINER / PAD / SLEEPER
-VENDOR = "V0100"
+VENDOR = "V0101"
 LOT = "L2025-09"
-COUNT = 100             # how many QR to generate
+COUNT = 1             # how many QR to generate
 WARRANTY_YEARS = 5
 
 BATCH_SIZE = 50         # commit every N rows (optimize inserts)
