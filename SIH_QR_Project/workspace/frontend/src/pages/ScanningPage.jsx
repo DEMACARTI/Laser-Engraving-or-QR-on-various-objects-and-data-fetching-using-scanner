@@ -4,7 +4,7 @@ import axios from 'axios';
 import jsQR from 'jsqr';
 import '../App.css';
 
-export default function ScanningPage({ onBack }) {
+export default function ScanningPage() {
   const [scannedUID, setScannedUID] = useState('');
   const [scanResult, setScanResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -488,12 +488,12 @@ export default function ScanningPage({ onBack }) {
       <header className="app-header">
         <div className="header-content">
           <div className="logo-section">
-            <button onClick={onBack} className="back-button">
+            <Link to="/" className="back-button">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Back to Main
-            </button>
+              Back to QR Management
+            </Link>
             <div className="logo-icon">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
                 <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -502,13 +502,6 @@ export default function ScanningPage({ onBack }) {
             </div>
             <h1 className="app-title">QR Code Scanner</h1>
           </div>
-          
-          <nav className="header-nav">
-            <Link to="/" className="nav-back-btn">
-              <span className="nav-icon">←</span>
-              Back to QR Management
-            </Link>
-          </nav>
           
           <div className="scan-mode-toggle">
             <label className="toggle-label">

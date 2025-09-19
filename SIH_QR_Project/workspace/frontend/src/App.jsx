@@ -125,10 +125,6 @@ function App() {
             >
               Engrave QR
             </button>
-            <Link to="/scan" className="nav-tab scan-link">
-              <span className="tab-icon">📱</span>
-              Scan QR
-            </Link>
           </nav>
         </div>
       </header>
@@ -137,8 +133,12 @@ function App() {
       <main className="main-content">
         <div className="page-container">
           <div className="page-header">
-            <h2 className="page-title">QR Code Generation</h2>
-            <p className="page-subtitle">Create high-quality QR codes for your manufacturing components</p>
+            <h2 className="page-title">QR Code Management</h2>
+            <p className="page-subtitle">Create and manage QR codes for your manufacturing components</p>
+            <div className="quick-access">
+              <span className="access-note">💡 Quick Access: </span>
+              <Link to="/scan" className="quick-link">Open QR Scanner</Link>
+            </div>
           </div>
 
           <div className="content-grid">
@@ -355,6 +355,22 @@ function App() {
           </div>
         </div>
       </main>
+      
+      {/* Footer */}
+      <footer className="app-footer">
+        <div className="footer-content">
+          <div className="footer-links">
+            <span className="footer-title">QR Management System</span>
+            <div className="footer-nav">
+              <Link to="/" className="footer-link">QR Generation</Link>
+              <Link to="/scan" className="footer-link">QR Scanner</Link>
+            </div>
+          </div>
+          <div className="footer-info">
+            <p>Access QR Scanner directly: <code>/scan</code></p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
