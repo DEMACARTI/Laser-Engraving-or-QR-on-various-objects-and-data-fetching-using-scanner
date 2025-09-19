@@ -43,10 +43,15 @@ export default function ScanningPage({ onBack }) {
     setScanResult(null);
 
     try {
+      console.log(`🔍 Attempting to scan UID: ${uid.trim()}`);
       // Try to connect to the actual scanning service first
       const response = await axios.post('http://localhost:5001/scan', {
         uid: uid.trim()
+      }, {
+        timeout: 3000  // 3 second timeout
       });
+      
+      console.log('✅ Backend response received:', response.data);
       
       if (response.data.success) {
         setScanResult(response.data.item);
@@ -56,16 +61,18 @@ export default function ScanningPage({ onBack }) {
         setError(response.data.error || 'Item not found');
       }
     } catch (err) {
-      console.log('Backend not available, using mock data');
+      console.log('❌ Backend not available, using mock data. Error:', err.message);
       
       // Fallback to mock data when backend is not available
       const mockResponse = await simulateScanAPI(uid.trim());
       
       if (mockResponse.ok) {
+        console.log('✅ Mock data found for UID:', uid.trim());
         setScanResult(mockResponse);
         addToHistory(uid.trim(), mockResponse);
         setScannedUID('');
       } else {
+        console.log('❌ UID not found in mock data:', uid.trim());
         setError(mockResponse.error || 'UID not found');
       }
     }
@@ -83,7 +90,7 @@ export default function ScanningPage({ onBack }) {
     // Add realistic delay
     await new Promise(resolve => setTimeout(resolve, 800));
     
-    // Mock data - in production this would come from scanning_service.py
+    // Expanded mock data - matches UIDs from QR generation
     const mockItems = {
       'PAD-V0100-L2025-09-00001': {
         ok: true,
@@ -91,35 +98,77 @@ export default function ScanningPage({ onBack }) {
         component: 'PAD',
         vendor: 'V0100',
         lot: 'L2025-09',
-        mfg_date: '2025-09-18',
+        mfg_date: '2025-09-19',
         warranty_years: 5,
-        expiry_date: '2030-09-18',
+        expiry_date: '2030-09-19',
         current_status: 'Manufactured',
-        status_updated_at: '2025-09-18 10:30:00'
+        status_updated_at: '2025-09-19 10:30:00',
+        location: 'Factory'
       },
-      'ERC-V001-L2025-09-00001': {
+      'PAD-V0100-L2025-09-00002': {
         ok: true,
-        uid: 'ERC-V001-L2025-09-00001',
-        component: 'ERC',
-        vendor: 'V001',
+        uid: 'PAD-V0100-L2025-09-00002',
+        component: 'PAD',
+        vendor: 'V0100',
         lot: 'L2025-09',
-        mfg_date: '2025-09-17',
-        warranty_years: 3,
-        expiry_date: '2028-09-17',
-        current_status: 'In Transit',
-        status_updated_at: '2025-09-18 14:20:00'
+        mfg_date: '2025-09-19',
+        warranty_years: 5,
+        expiry_date: '2030-09-19',
+        current_status: 'Quality Checked',
+        status_updated_at: '2025-09-19 11:15:00',
+        location: 'Quality Control'
       },
-      'LINER-V012-L2025-10-00001': {
+      'PAD-V0100-L2025-09-00003': {
         ok: true,
-        uid: 'LINER-V012-L2025-10-00001',
+        uid: 'PAD-V0100-L2025-09-00003',
+        component: 'PAD',
+        vendor: 'V0100',
+        lot: 'L2025-09',
+        mfg_date: '2025-09-19',
+        warranty_years: 5,
+        expiry_date: '2030-09-19',
+        current_status: 'Shipped',
+        status_updated_at: '2025-09-19 14:20:00',
+        location: 'In Transit'
+      },
+      'ERC-V010-L2025-09-00001': {
+        ok: true,
+        uid: 'ERC-V010-L2025-09-00001',
+        component: 'ERC',
+        vendor: 'V010',
+        lot: 'L2025-09',
+        mfg_date: '2025-09-18',
+        warranty_years: 3,
+        expiry_date: '2028-09-18',
+        current_status: 'Installed',
+        status_updated_at: '2025-09-19 16:45:00',
+        location: 'Platform 5'
+      },
+      'LINER-V011-L2025-10-00001': {
+        ok: true,
+        uid: 'LINER-V011-L2025-10-00001',
         component: 'LINER',
-        vendor: 'V012',
+        vendor: 'V011',
         lot: 'L2025-10',
         mfg_date: '2025-09-19',
         warranty_years: 7,
         expiry_date: '2032-09-19',
-        current_status: 'Quality Check',
-        status_updated_at: '2025-09-19 09:15:00'
+        current_status: 'Manufactured',
+        status_updated_at: '2025-09-19 09:15:00',
+        location: 'Factory'
+      },
+      'SLEEPER-V012-L2025-11-00001': {
+        ok: true,
+        uid: 'SLEEPER-V012-L2025-11-00001',
+        component: 'SLEEPER',
+        vendor: 'V012',
+        lot: 'L2025-11',
+        mfg_date: '2025-09-19',
+        warranty_years: 10,
+        expiry_date: '2035-09-19',
+        current_status: 'Manufactured',
+        status_updated_at: '2025-09-19 08:00:00',
+        location: 'Factory'
       }
     };
 

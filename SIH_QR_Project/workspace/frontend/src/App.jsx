@@ -13,12 +13,23 @@ function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Mock options since backend might not be available
-    setOptions({
-      components: ["ERC", "LINER", "PAD", "SLEEPER"],
-      vendors: ["V001", "V010", "V011", "V012"],
-      lots: ["L2025-09", "L2025-10", "L2025-11"]
-    });
+    // Load options from backend API
+    const loadOptions = async () => {
+      try {
+        const response = await axios.get('http://localhost:5001/api/options');
+        setOptions(response.data);
+      } catch (err) {
+        console.log('Backend not available, using fallback options');
+        // Fallback to mock options if backend is not available
+        setOptions({
+          components: ["ERC", "LINER", "PAD", "SLEEPER"],
+          vendors: ["V010", "V011", "V012"],
+          lots: ["L2025-09", "L2025-10", "L2025-11"]
+        });
+      }
+    };
+    
+    loadOptions();
   }, []);
 
   const handleChange = e => {
@@ -33,21 +44,41 @@ function App() {
     setError("");
     
     try {
-      // Simulate QR generation for demo
-      const mockResults = [];
-      for (let i = 1; i <= parseInt(form.count); i++) {
-        const uid = `${form.component}-${form.vendor}-${form.lot}-${String(i).padStart(5, '0')}`;
-        mockResults.push({
-          uid: uid,
-          qr_path: `../qr_batch_output/${uid}.png`
-        });
-      }
+      // Call the actual backend API for QR generation
+      const response = await axios.post('http://localhost:5001/api/generate', {
+        component: form.component,
+        vendor: form.vendor,
+        lot: form.lot,
+        warranty_years: parseInt(form.warranty_years),
+        count: parseInt(form.count),
+        mfg_date: form.mfg_date || null
+      });
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setResults(mockResults);
+      if (response.data.success) {
+        setResults(response.data.results);
+      } else {
+        setError("Failed to generate QR codes. Please check the backend service.");
+      }
     } catch (err) {
-      setError("Failed to generate QR codes. Please try again.");
+      console.error('QR Generation Error:', err);
+      
+      // Fallback to mock data if backend is not available
+      if (err.code === 'ECONNREFUSED' || err.response?.status >= 500) {
+        setError("Backend service unavailable. Please start the backend server at http://localhost:5001");
+        
+        // Show mock results for demo purposes
+        const mockResults = [];
+        for (let i = 1; i <= parseInt(form.count); i++) {
+          const uid = `${form.component}-${form.vendor}-${form.lot}-${String(i).padStart(5, '0')}`;
+          mockResults.push({
+            uid: uid,
+            qr_path: `../qr_batch_output/${uid}.png`
+          });
+        }
+        setResults(mockResults);
+      } else {
+        setError(err.response?.data?.error || "Failed to generate QR codes. Please try again.");
+      }
     }
     setLoading(false);
   };

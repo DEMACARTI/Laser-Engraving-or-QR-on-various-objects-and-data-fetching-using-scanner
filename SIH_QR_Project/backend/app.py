@@ -17,6 +17,17 @@ DB_CONFIG = {
     "database": "sih_qr_db"
 }
 
+# Test database connection on startup
+def test_db_connection():
+    try:
+        conn = mysql.connector.connect(**DB_CONFIG)
+        conn.close()
+        print("✅ Database connection successful")
+        return True
+    except mysql.connector.Error as e:
+        print(f"❌ Database connection failed: {e}")
+        return False
+
 OUTPUT_DIR = Path("../qr_batch_output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -122,6 +133,71 @@ def get_manufactured_items():
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
+# API to scan/lookup item by UID
+@app.route("/scan", methods=["POST"])
+def scan_uid():
+    data = request.json
+    uid = data.get("uid", "").strip()
+    
+    if not uid:
+        return jsonify({"success": False, "error": "UID is required"}), 400
+    
+    try:
+        conn = mysql.connector.connect(**DB_CONFIG)
+        cur = conn.cursor(dictionary=True)
+        
+        # Get item details
+        cur.execute("""
+            SELECT uid, component, vendor, lot, mfg_date, warranty_years, created_at
+            FROM items 
+            WHERE uid = %s
+        """, (uid,))
+        item = cur.fetchone()
+        
+        if not item:
+            cur.close()
+            conn.close()
+            return jsonify({"success": False, "error": "UID not found in database"})
+        
+        # Get current status
+        cur.execute("""
+            SELECT status, location, note, updated_at
+            FROM statuses 
+            WHERE uid = %s 
+            ORDER BY updated_at DESC 
+            LIMIT 1
+        """, (uid,))
+        status = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        # Calculate expiry date
+        from datetime import datetime, timedelta
+        mfg_date = datetime.strptime(str(item['mfg_date']), '%Y-%m-%d')
+        expiry_date = mfg_date + timedelta(days=365 * item['warranty_years'])
+        
+        # Format response to match expected frontend format
+        response_item = {
+            "uid": item["uid"],
+            "component": item["component"],
+            "vendor": item["vendor"],
+            "lot": item["lot"],
+            "mfg_date": str(item["mfg_date"]),
+            "warranty_years": item["warranty_years"],
+            "expiry_date": expiry_date.strftime('%Y-%m-%d'),
+            "current_status": status["status"] if status else "Unknown",
+            "status_updated_at": str(status["updated_at"]) if status else "Unknown",
+            "location": status["location"] if status else "Unknown"
+        }
+        
+        return jsonify({"success": True, "item": response_item})
+        
+    except mysql.connector.Error as e:
+        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Server error: {str(e)}"}), 500
+
 # API to get QR image by UID
 @app.route("/api/qr/<uid>", methods=["GET"])
 def get_qr(uid):
@@ -131,4 +207,9 @@ def get_qr(uid):
     return send_file(str(path), mimetype="image/png")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    print("Starting Flask server...")
+    if test_db_connection():
+        print("Starting server on http://localhost:5001")
+        app.run(host="0.0.0.0", port=5001, debug=False)  # Disable debug mode to avoid watchdog issues
+    else:
+        print("Cannot start server due to database connection issues")
