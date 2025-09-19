@@ -1,0 +1,135 @@
+body, html, #root {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(135deg, #e0e7ff 0%, #f0fdfa 100%);
+}
+
+.container {
+  max-width: 440px;
+  margin: 48px auto;
+  background: rgba(255,255,255,0.97);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+  padding: 36px 22px 28px 22px;
+  backdrop-filter: blur(2px);
+}
+h1 {
+  text-align: center;
+  color: #2563eb;
+  margin-bottom: 22px;
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+.qr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.qr-form label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+  color: #374151;
+  font-size: 1.01rem;
+}
+.qr-form input, .qr-form select {
+  margin-top: 4px;
+  padding: 9px;
+  border-radius: 8px;
+  border: 1.5px solid #cbd5e1;
+  font-size: 1rem;
+  background: #f9fafb;
+  transition: border 0.2s;
+}
+.qr-form input:focus, .qr-form select:focus {
+  border: 1.5px solid #2563eb;
+  outline: none;
+}
+.qr-form button {
+  margin-top: 16px;
+  padding: 12px 0;
+  background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #2563eb22;
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.qr-form button:disabled {
+  background: #a5b4fc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.qr-form button:not(:disabled):hover {
+  background: linear-gradient(90deg, #1e40af 0%, #0ea5e9 100%);
+}
+
+.results {
+  margin-top: 36px;
+}
+.results h2 {
+  color: #2563eb;
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+}
+.results ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.results li {
+  background: #f3f6fa;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 6px #2563eb11;
+  text-align: center;
+  min-width: 110px;
+}
+.results img {
+  margin-top: 8px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1.5px solid #e0e7ef;
+  box-shadow: 0 1px 4px #2563eb11;
+}
+
+.proceed-engrave-btn {
+  display: block;
+  margin: 24px auto 0 auto;
+  padding: 12px 32px;
+  background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.13rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #2563eb22;
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.proceed-engrave-btn:disabled {
+  background: #a5b4fc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.proceed-engrave-btn:not(:disabled):hover {
+  background: linear-gradient(90deg, #1e40af 0%, #0ea5e9 100%);
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 12px 2vw;
+    max-width: 98vw;
+  }
+  .results ul {
+    gap: 8px;
+  }
+}
