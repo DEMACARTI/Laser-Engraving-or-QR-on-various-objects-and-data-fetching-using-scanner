@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import jsQR from 'jsqr';
 import '../App.css';
 
 export default function ScanningPage({ onBack }) {
@@ -15,8 +16,14 @@ export default function ScanningPage({ onBack }) {
   const [availableCameras, setAvailableCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
   const [cameraPermission, setCameraPermission] = useState('prompt'); // 'granted', 'denied', 'prompt'
+  const [isScanning, setIsScanning] = useState(false);
+  const [lastScannedCode, setLastScannedCode] = useState('');
+  const [scanCooldown, setScanCooldown] = useState(false);
+  const [detectedQR, setDetectedQR] = useState(null);
   const inputRef = useRef(null);
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const scanIntervalRef = useRef(null);
 
   // Focus input on mount for barcode scanner
   useEffect(() => {
@@ -36,22 +43,31 @@ export default function ScanningPage({ onBack }) {
     setScanResult(null);
 
     try {
-      // Mock API call since scanning_service.py might not be running
-      // In production, this would call: http://localhost:5001/scan
+      // Try to connect to the actual scanning service first
+      const response = await axios.post('http://localhost:5001/scan', {
+        uid: uid.trim()
+      });
+      
+      if (response.data.success) {
+        setScanResult(response.data.item);
+        addToHistory(uid.trim(), response.data.item);
+        setScannedUID('');
+      } else {
+        setError(response.data.error || 'Item not found');
+      }
+    } catch (err) {
+      console.log('Backend not available, using mock data');
+      
+      // Fallback to mock data when backend is not available
       const mockResponse = await simulateScanAPI(uid.trim());
       
       if (mockResponse.ok) {
         setScanResult(mockResponse);
-        setScanHistory(prev => [
-          { ...mockResponse, scannedAt: new Date().toISOString() },
-          ...prev.slice(0, 9) // Keep last 10 scans
-        ]);
+        addToHistory(uid.trim(), mockResponse);
         setScannedUID('');
       } else {
         setError(mockResponse.error || 'UID not found');
       }
-    } catch (err) {
-      setError('Failed to scan UID. Please check the service connection.');
     }
     
     setLoading(false);
@@ -176,6 +192,13 @@ export default function ScanningPage({ onBack }) {
     return new Date(expiryDate) < new Date();
   };
 
+  const addToHistory = (uid, item) => {
+    setScanHistory(prev => [
+      { ...item, uid, scannedAt: new Date().toISOString() },
+      ...prev.slice(0, 9) // Keep last 10 scans
+    ]);
+  };
+
   const clearHistory = () => {
     setScanHistory([]);
   };
@@ -273,6 +296,95 @@ export default function ScanningPage({ onBack }) {
     }
   };
 
+  // QR Scanning Functions
+  const scanQRFromVideo = () => {
+    if (!videoRef.current || !canvasRef.current || !cameraStream) {
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      return; // Video not ready yet
+    }
+
+    // Draw current video frame to canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Get image data from canvas
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Scan for QR code
+    const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert"
+    });
+
+    if (qrCode) {
+      setDetectedQR(qrCode);
+      
+      // Only process if it's a new code or cooldown has expired
+      if (qrCode.data !== lastScannedCode && !scanCooldown) {
+        handleQRDetected(qrCode.data, qrCode.location);
+      }
+    } else {
+      setDetectedQR(null);
+    }
+  };
+
+  const handleQRDetected = async (qrData, location) => {
+    try {
+      console.log('QR Code detected:', qrData);
+      
+      // Set cooldown to prevent duplicate scans
+      setScanCooldown(true);
+      setLastScannedCode(qrData);
+      
+      // Update the input field with detected code
+      setScannedUID(qrData);
+      
+      // Automatically trigger the scan
+      await handleScan(qrData);
+      
+      // Clear cooldown after 3 seconds
+      setTimeout(() => {
+        setScanCooldown(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error processing QR code:', error);
+      setScanCooldown(false);
+    }
+  };
+
+  const startQRScanning = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+    }
+    
+    setIsScanning(true);
+    
+    // Scan every 100ms for smooth detection
+    scanIntervalRef.current = setInterval(() => {
+      scanQRFromVideo();
+    }, 100);
+  };
+
+  const stopQRScanning = () => {
+    setIsScanning(false);
+    setDetectedQR(null);
+    
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+  };
+
   // Initialize camera on component mount
   useEffect(() => {
     const initializeCamera = async () => {
@@ -296,6 +408,30 @@ export default function ScanningPage({ onBack }) {
       stopCamera();
     }
   }, [manualInput, selectedCamera]);
+
+  // Handle QR scanning when camera stream changes
+  useEffect(() => {
+    if (cameraStream && !manualInput) {
+      // Start QR scanning when camera is active and in scanner mode
+      const startScanningDelayed = setTimeout(() => {
+        startQRScanning();
+      }, 1000); // Give camera time to initialize
+      
+      return () => {
+        clearTimeout(startScanningDelayed);
+        stopQRScanning();
+      };
+    } else {
+      stopQRScanning();
+    }
+  }, [cameraStream, manualInput]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopQRScanning();
+    };
+  }, []);
 
   return (
     <div className="app-container">
@@ -375,6 +511,12 @@ export default function ScanningPage({ onBack }) {
                         className="camera-preview"
                       />
                       
+                      {/* Hidden canvas for QR code scanning */}
+                      <canvas
+                        ref={canvasRef}
+                        style={{ display: 'none' }}
+                      />
+                      
                       {/* Camera Overlay */}
                       <div className="camera-overlay">
                         <div className="scan-frame">
@@ -384,16 +526,51 @@ export default function ScanningPage({ onBack }) {
                             <div className="corner bottom-left"></div>
                             <div className="corner bottom-right"></div>
                           </div>
-                          <div className="scan-line"></div>
+                          <div className={`scan-line ${detectedQR ? 'qr-detected' : ''}`}></div>
                         </div>
+                        
+                        {/* QR Detection Highlight */}
+                        {detectedQR && (
+                          <div 
+                            className="qr-highlight"
+                            style={{
+                              position: 'absolute',
+                              left: `${(detectedQR.location.topLeftCorner.x / videoRef.current?.videoWidth * 100) || 0}%`,
+                              top: `${(detectedQR.location.topLeftCorner.y / videoRef.current?.videoHeight * 100) || 0}%`,
+                              width: `${((detectedQR.location.topRightCorner.x - detectedQR.location.topLeftCorner.x) / videoRef.current?.videoWidth * 100) || 0}%`,
+                              height: `${((detectedQR.location.bottomLeftCorner.y - detectedQR.location.topLeftCorner.y) / videoRef.current?.videoHeight * 100) || 0}%`,
+                            }}
+                          >
+                            <div className="qr-highlight-border"></div>
+                            <div className="qr-highlight-content">
+                              <span className="qr-detected-text">QR Code Detected!</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Camera Status */}
                       <div className="camera-status">
-                        {cameraStream && (
+                        {cameraStream && isScanning && (
+                          <div className="status-indicator scanning">
+                            <div className="status-dot scanning-dot"></div>
+                            <span>Scanning for QR Codes</span>
+                          </div>
+                        )}
+                        {cameraStream && !isScanning && (
                           <div className="status-indicator active">
                             <div className="status-dot"></div>
                             <span>Camera Active</span>
+                          </div>
+                        )}
+                        {detectedQR && (
+                          <div className="status-indicator success">
+                            <span>✅ QR Code Detected</span>
+                          </div>
+                        )}
+                        {scanCooldown && (
+                          <div className="status-indicator cooldown">
+                            <span>⏳ Processing...</span>
                           </div>
                         )}
                         {cameraError && (

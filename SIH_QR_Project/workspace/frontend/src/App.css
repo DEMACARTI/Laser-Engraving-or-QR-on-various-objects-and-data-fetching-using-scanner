@@ -1826,6 +1826,22 @@ textarea,
   }
 }
 
+.scan-line.qr-detected {
+  background: linear-gradient(90deg, transparent 0%, #22c55e 50%, transparent 100%);
+  animation: qrDetectedScan 0.5s ease-in-out;
+}
+
+@keyframes qrDetectedScan {
+  0% {
+    opacity: 0;
+    background: linear-gradient(90deg, transparent 0%, #22c55e 50%, transparent 100%);
+  }
+  100% {
+    opacity: 1;
+    background: linear-gradient(90deg, transparent 0%, #22c55e 50%, transparent 100%);
+  }
+}
+
 .camera-status {
   position: absolute;
   top: var(--spacing-md);
@@ -1853,8 +1869,36 @@ textarea,
   background: rgba(34, 197, 94, 0.8);
 }
 
+.status-indicator.scanning {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.status-indicator.success {
+  background: rgba(34, 197, 94, 0.9);
+  animation: successPulse 0.6s ease-out;
+}
+
+.status-indicator.cooldown {
+  background: rgba(251, 191, 36, 0.8);
+}
+
 .status-indicator.error {
   background: rgba(239, 68, 68, 0.8);
+}
+
+@keyframes successPulse {
+  0% {
+    transform: scale(1);
+    background: rgba(34, 197, 94, 0.9);
+  }
+  50% {
+    transform: scale(1.05);
+    background: rgba(34, 197, 94, 1);
+  }
+  100% {
+    transform: scale(1);
+    background: rgba(34, 197, 94, 0.9);
+  }
 }
 
 .status-dot {
@@ -1865,12 +1909,28 @@ textarea,
   animation: pulse 2s infinite;
 }
 
+.scanning-dot {
+  background: #3b82f6;
+  animation: scanningPulse 1s infinite;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+@keyframes scanningPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.2);
   }
 }
 
@@ -2061,6 +2121,71 @@ textarea,
   .status-indicator {
     font-size: 0.75rem;
     padding: 4px 8px;
+  }
+}
+
+/* QR Detection Highlight */
+.qr-highlight {
+  pointer-events: none;
+  z-index: 10;
+}
+
+.qr-highlight-border {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border: 3px solid #22c55e;
+  border-radius: 8px;
+  animation: qrHighlight 0.8s ease-out;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
+}
+
+.qr-highlight-content {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+
+.qr-detected-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.qr-detected-text::before {
+  content: '✓';
+  font-weight: bold;
+}
+
+@keyframes qrHighlight {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+    border-color: #3b82f6;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+    border-color: #22c55e;
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    border-color: #22c55e;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
   }
 }
 
