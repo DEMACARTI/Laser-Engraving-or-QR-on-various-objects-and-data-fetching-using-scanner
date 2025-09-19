@@ -1,193 +1,414 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import './EngraveQRPage.css';
+import '../App.css';
 
-export default function EngraveQRPage() {
-  const [items, setItems] = useState([]);
-  const [selectedUids, setSelectedUids] = useState([]);
-  const [appendUids, setAppendUids] = useState("");
-  const [statusUpdate, setStatusUpdate] = useState({ uid: "", status: "", note: "" });
-  const [delay, setDelay] = useState(6.0);
-  const [simulate, setSimulate] = useState(true);
-  const [status, setStatus] = useState({ status: 'idle' });
-  const [loading, setLoading] = useState(false);
+export default function EngraveQRPage({ onBack }) {
+  const [generatedQRs, setGeneratedQRs] = useState([]);
+  const [numQRsToEngrave, setNumQRsToEngrave] = useState(10);
+  const [timeDelay, setTimeDelay] = useState(2.0);
+  const [engravingStatus, setEngravingStatus] = useState('idle'); // 'idle', 'running', 'paused', 'stopped'
+  const [qrStatuses, setQrStatuses] = useState({});
+  const [currentEngravingIndex, setCurrentEngravingIndex] = useState(0);
   const [error, setError] = useState("");
+  const [startTime, setStartTime] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
   const intervalRef = useRef(null);
+  const timerRef = useRef(null);
 
-  // Fetch manufactured items on mount
+  // Fetch generated QR codes on mount
   useEffect(() => {
-    fetchItems();
-    // eslint-disable-next-line
+    fetchGeneratedQRs();
   }, []);
 
-  const fetchItems = () => {
-    axios.get('http://localhost:5000/items/manufactured?limit=100')
-      .then(res => setItems(res.data))
-      .catch(() => setError('Failed to fetch items.'));
+  const fetchGeneratedQRs = async () => {
+    try {
+      // Create mock data for demonstration since we have generated QR codes in the output folder
+      const mockQRs = [];
+      for (let i = 1; i <= 50; i++) {
+        mockQRs.push({
+          uid: `PAD-V0100-L2025-09-${String(i).padStart(5, '0')}`,
+          qr_path: `../qr_batch_output/PAD-V0100-L2025-09-${String(i).padStart(5, '0')}.png`
+        });
+      }
+      for (let i = 1; i <= 30; i++) {
+        mockQRs.push({
+          uid: `ERC-V001-L2025-09-${String(i).padStart(5, '0')}`,
+          qr_path: `../qr_batch_output/ERC-V001-L2025-09-${String(i).padStart(5, '0')}.png`
+        });
+      }
+      setGeneratedQRs(mockQRs);
+    } catch (err) {
+      setError('Failed to fetch generated QR codes.');
+    }
   };
 
-  // Poll status if engraving is running
+  // Simulated engraving process
+  const simulateEngraving = () => {
+    if (currentEngravingIndex >= numQRsToEngrave || engravingStatus !== 'running') {
+      if (currentEngravingIndex >= numQRsToEngrave) {
+        setEngravingStatus('idle');
+        setCurrentEngravingIndex(0);
+      }
+      return;
+    }
+
+    const currentQR = generatedQRs[currentEngravingIndex];
+    if (currentQR) {
+      // Set status to engraving
+      setQrStatuses(prev => ({
+        ...prev,
+        [currentQR.uid]: 'engraving'
+      }));
+
+      // Simulate engraving process with delay
+      setTimeout(() => {
+        if (engravingStatus === 'running') {
+          // Set status to engraved
+          setQrStatuses(prev => ({
+            ...prev,
+            [currentQR.uid]: 'engraved'
+          }));
+          
+          setCurrentEngravingIndex(prev => prev + 1);
+        }
+      }, timeDelay * 1000);
+    }
+  };
+
+  // Effect to handle the engraving simulation
   useEffect(() => {
-    if (status.status === 'running') {
-      intervalRef.current = setInterval(fetchStatus, 1200);
+    if (engravingStatus === 'running') {
+      intervalRef.current = setInterval(() => {
+        simulateEngraving();
+      }, (timeDelay + 0.5) * 1000); // Add small buffer
     } else {
-      clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     }
-    return () => clearInterval(intervalRef.current);
-    // eslint-disable-next-line
-  }, [status.status]);
 
-  const fetchStatus = async () => {
-    try {
-      const res = await axios.get('http://localhost:5000/engrave/status');
-      setStatus(res.data);
-    } catch {
-      setStatus({ status: 'error' });
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [engravingStatus, currentEngravingIndex, numQRsToEngrave, timeDelay]);
+
+  const handleStart = () => {
+    if (generatedQRs.length === 0) {
+      setError('No QR codes available for engraving.');
+      return;
     }
-  };
-
-  const handleStart = async e => {
-    e.preventDefault();
-    setLoading(true);
+    if (numQRsToEngrave > generatedQRs.length) {
+      setError(`Cannot engrave ${numQRsToEngrave} QRs. Only ${generatedQRs.length} QRs available.`);
+      return;
+    }
+    
     setError("");
-    try {
-      const uids = (selectedUids.length > 0 ? items.filter(i => selectedUids.includes(i.uid)) : items).map(i => ({ uid: i.uid, qr_path: i.qr_path }));
-      await axios.post('http://localhost:5000/engrave/start', {
-        uids,
-        delay_seconds: delay,
-        simulate
-      });
-      fetchStatus();
-    } catch (err) {
-      setError('Failed to start engraving.');
-    }
-    setLoading(false);
+    setEngravingStatus('running');
+    setCurrentEngravingIndex(0);
+    setQrStatuses({});
+    setElapsedTime(0);
+    setStartTime(Date.now());
+    simulateEngraving();
   };
 
-  const handleAppend = async e => {
-    e.preventDefault();
-    setError("");
-    try {
-      const uids = appendUids.split(',').map(x => x.trim()).filter(Boolean);
-      if (!uids.length) return setError('Enter at least one UID to append.');
-      await axios.post('http://localhost:5000/engrave/append', { uids });
-      setAppendUids("");
-      fetchStatus();
-    } catch (err) {
-      setError('Failed to append UIDs.');
+  const handlePause = () => {
+    setEngravingStatus('paused');
+  };
+
+  const handleResume = () => {
+    setEngravingStatus('running');
+  };
+
+  const handleEnd = () => {
+    setEngravingStatus('stopped');
+    setCurrentEngravingIndex(0);
+    setQrStatuses({});
+    setElapsedTime(0);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
   };
 
-  const handleStatusUpdate = async e => {
-    e.preventDefault();
-    setError("");
-    try {
-      if (!statusUpdate.uid || !statusUpdate.status) return setError('UID and status required.');
-      await axios.post('http://localhost:5000/update_status', statusUpdate);
-      setStatusUpdate({ uid: "", status: "", note: "" });
-      fetchItems();
-    } catch (err) {
-      setError('Failed to update status.');
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'engraving': return '#f59e0b';
+      case 'engraved': return '#10b981';
+      default: return '#6b7280';
     }
   };
 
-  const handlePause = async () => {
-    await axios.post('http://localhost:5000/engrave/pause');
-    fetchStatus();
-  };
-  const handleResume = async () => {
-    await axios.post('http://localhost:5000/engrave/resume');
-    fetchStatus();
-  };
-  const handleStop = async () => {
-    await axios.post('http://localhost:5000/engrave/stop');
-    fetchStatus();
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'engraving': return 'Engraving...';
+      case 'engraved': return 'Engraved';
+      default: return 'Pending';
+    }
   };
 
-  const percent = status.total ? Math.round((status.done / status.total) * 100) : 0;
+  // Timer effect
+  useEffect(() => {
+    if (engravingStatus === 'running') {
+      setStartTime(Date.now() - elapsedTime * 1000);
+      timerRef.current = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [engravingStatus, startTime]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getCompletionPercentage = () => {
+    const completed = Object.keys(qrStatuses).filter(uid => qrStatuses[uid] === 'engraved').length;
+    return numQRsToEngrave > 0 ? Math.round((completed / numQRsToEngrave) * 100) : 0;
+  };
+
+  const getEstimatedTimeRemaining = () => {
+    const completed = Object.keys(qrStatuses).filter(uid => qrStatuses[uid] === 'engraved').length;
+    const remaining = numQRsToEngrave - completed;
+    return remaining * timeDelay;
+  };
 
   return (
-    <div className="engrave-container">
-      <h1 className="engrave-title">Engrave QR Codes</h1>
-      <form className="engrave-form" onSubmit={handleStart}>
-        <label>
-          Delay between engravings (seconds):
-          <input type="number" min="1" max="30" step="0.1" value={delay} onChange={e => setDelay(e.target.value)} required />
-        </label>
-        <label>
-          Simulate (no hardware):
-          <select value={simulate ? "1" : "0"} onChange={e => setSimulate(e.target.value === "1")}> 
-            <option value="1">Yes</option>
-            <option value="0">No</option>
-          </select>
-        </label>
-        <label>
-          <input type="checkbox" checked={selectedUids.length === items.length} onChange={e => setSelectedUids(e.target.checked ? items.map(i=>i.uid) : [])} />
-          Select all items
-        </label>
-        <div style={{maxHeight:120, overflowY:'auto', border:'1px solid #e0e7ff', borderRadius:8, marginBottom:8, padding:6}}>
-          {items.map(i => (
-            <label key={i.uid} style={{display:'block', marginBottom:4}}>
-              <input type="checkbox" checked={selectedUids.includes(i.uid)} onChange={e => setSelectedUids(e.target.checked ? [...selectedUids, i.uid] : selectedUids.filter(uid=>uid!==i.uid))} />
-              <b style={{marginLeft:6}}>{i.uid}</b> {i.qr_path && <span style={{color:'#64748b', fontSize:'0.97em'}}>({i.qr_path})</span>}
-            </label>
-          ))}
+    <div className="app-container">
+      {/* Header */}
+      <header className="app-header">
+        <div className="header-content">
+          <div className="logo-section">
+            <button onClick={onBack} className="back-button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M19 12H5m0 0l7 7m-7-7l7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Back to Generate
+            </button>
+            <div className="logo-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5z" stroke="currentColor" strokeWidth="2" fill="none"/>
+                <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" fill="none"/>
+              </svg>
+            </div>
+            <h1 className="app-title">Laser Engraving System</h1>
+          </div>
+          
+          <div className="status-indicator">
+            <div className={`status-dot ${engravingStatus}`}></div>
+            <span className="status-text">{engravingStatus.toUpperCase()}</span>
+          </div>
         </div>
-        <button className="engrave-btn" type="submit" disabled={loading || status.status === 'running'}>
-          {loading ? "Starting..." : "Start Engraving"}
-        </button>
-      </form>
-      <form className="engrave-form" onSubmit={handleAppend} style={{marginTop:10}}>
-        <label>Append UIDs to current job (comma separated):
-          <input type="text" value={appendUids} onChange={e => setAppendUids(e.target.value)} placeholder="UID1, UID2, ..." />
-        </label>
-        <button className="engrave-btn" type="submit">Append</button>
-      </form>
-      <form className="engrave-form" onSubmit={handleStatusUpdate} style={{marginTop:10}}>
-        <label>Update Item Status:</label>
-        <input type="text" placeholder="UID" value={statusUpdate.uid} onChange={e=>setStatusUpdate({...statusUpdate, uid: e.target.value})} />
-        <select value={statusUpdate.status} onChange={e=>setStatusUpdate({...statusUpdate, status: e.target.value})}>
-          <option value="">Select Status</option>
-          <option value="Manufactured">Manufactured</option>
-          <option value="Engraved">Engraved</option>
-          <option value="Shipped">Shipped</option>
-          <option value="Rejected">Rejected</option>
-        </select>
-        <input type="text" placeholder="Note (optional)" value={statusUpdate.note} onChange={e=>setStatusUpdate({...statusUpdate, note: e.target.value})} />
-        <button className="engrave-btn" type="submit">Update Status</button>
-      </form>
-      {error && <div className="engrave-status" style={{ color: '#dc2626', background: '#fef2f2' }}>{error}</div>}
-      {status.status !== 'idle' && (
-        <div className="engrave-status">
-          <div>Status: <b>{status.status}</b></div>
-          {status.status === 'running' && (
-            <>
-              <div>Progress: {status.done} / {status.total}</div>
-              <div className="engrave-progress-bar">
-                <div className="engrave-progress" style={{ width: percent + '%' }} />
+      </header>
+
+      {/* Main Content */}
+      <main className="main-content">
+        <div className="page-container">
+          <div className="page-header">
+            <h2 className="page-title">QR Code Engraving</h2>
+            <p className="page-subtitle">Configure and monitor the laser engraving process</p>
+          </div>
+
+          <div className="content-grid engrave-grid">
+            {/* Configuration Panel */}
+            <div className="form-section">
+              <div className="form-card">
+                <h3 className="card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                  Configuration
+                </h3>
+                
+                <div className="form-group">
+                  <label className="form-label">QR Codes to Engrave</label>
+                  <div className="input-with-info">
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max={generatedQRs.length} 
+                      value={numQRsToEngrave} 
+                      onChange={e => setNumQRsToEngrave(parseInt(e.target.value) || 1)}
+                      disabled={engravingStatus === 'running'}
+                      className="form-input"
+                    />
+                    <span className="input-info">of {generatedQRs.length} available</span>
+                  </div>
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label">Time Delay (seconds)</label>
+                  <div className="input-with-info">
+                    <input 
+                      type="number" 
+                      min="0.5" 
+                      max="60" 
+                      step="0.5" 
+                      value={timeDelay} 
+                      onChange={e => setTimeDelay(parseFloat(e.target.value) || 2.0)}
+                      disabled={engravingStatus === 'running'}
+                      className="form-input"
+                    />
+                    <span className="input-info">between each engraving</span>
+                  </div>
+                </div>
+
+                {/* Control Buttons */}
+                <div className="control-buttons">
+                  <button 
+                    className={`btn btn-primary ${engravingStatus === 'running' ? 'btn-disabled' : ''}`}
+                    onClick={handleStart}
+                    disabled={engravingStatus === 'running'}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <polygon points="5,3 19,12 5,21" fill="currentColor"/>
+                    </svg>
+                    Start Engraving
+                  </button>
+                  
+                  <div className="button-group">
+                    <button 
+                      className={`btn btn-secondary ${engravingStatus !== 'running' ? 'btn-disabled' : ''}`}
+                      onClick={handlePause}
+                      disabled={engravingStatus !== 'running'}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <rect x="6" y="4" width="4" height="16" fill="currentColor"/>
+                        <rect x="14" y="4" width="4" height="16" fill="currentColor"/>
+                      </svg>
+                      Pause
+                    </button>
+                    
+                    <button 
+                      className={`btn btn-secondary ${engravingStatus !== 'paused' ? 'btn-disabled' : ''}`}
+                      onClick={handleResume}
+                      disabled={engravingStatus !== 'paused'}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <polygon points="5,3 19,12 5,21" fill="currentColor"/>
+                      </svg>
+                      Resume
+                    </button>
+                    
+                    <button 
+                      className={`btn btn-secondary ${engravingStatus === 'idle' ? 'btn-disabled' : ''}`}
+                      onClick={handleEnd}
+                      disabled={engravingStatus === 'idle'}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2" fill="none"/>
+                        <rect x="9" y="9" width="6" height="6" fill="currentColor"/>
+                      </svg>
+                      Stop
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="error-message">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                      <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" strokeWidth="2"/>
+                      <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                    {error}
+                  </div>
+                )}
               </div>
-              <div style={{ marginTop: 10 }}>
-                <button className="engrave-btn" style={{marginRight:8}} onClick={handlePause} disabled={status.status !== 'running'}>Pause</button>
-                <button className="engrave-btn" onClick={handleStop} disabled={status.status !== 'running'}>Stop</button>
+            </div>
+
+            {/* Status and Progress Panel */}
+            <div className="results-section">
+              <div className="results-card">
+                <div className="results-header">
+                  <h3 className="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                      <polyline points="22,4 12,14.01 9,11.01" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Progress Overview
+                  </h3>
+                </div>
+
+                {/* Progress Stats */}
+                <div className="progress-stats">
+                  <div className="stat-item">
+                    <div className="stat-value">{getCompletionPercentage()}%</div>
+                    <div className="stat-label">Complete</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-value">{Object.keys(qrStatuses).filter(uid => qrStatuses[uid] === 'engraved').length}</div>
+                    <div className="stat-label">Engraved</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-value">{numQRsToEngrave - Object.keys(qrStatuses).filter(uid => qrStatuses[uid] === 'engraved').length}</div>
+                    <div className="stat-label">Remaining</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-value">{formatTime(elapsedTime)}</div>
+                    <div className="stat-label">Elapsed</div>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="progress-container">
+                  <div className="progress-bar">
+                    <div 
+                      className="progress-fill" 
+                      style={{ width: `${getCompletionPercentage()}%` }}
+                    ></div>
+                  </div>
+                  <div className="progress-text">
+                    {Object.keys(qrStatuses).filter(uid => qrStatuses[uid] === 'engraved').length} of {numQRsToEngrave} completed
+                  </div>
+                </div>
+
+                {/* QR Status List */}
+                <div className="qr-status-section">
+                  <h4 className="section-title">Engraving Queue</h4>
+                  <div className="qr-status-list">
+                    {generatedQRs.slice(0, Math.min(numQRsToEngrave, 8)).map((qr, index) => (
+                      <div key={qr.uid} className={`qr-status-item ${index === currentEngravingIndex && engravingStatus === 'running' ? 'current' : ''}`}>
+                        <div className="qr-info">
+                          <div className="qr-uid">{qr.uid}</div>
+                          <div className="qr-index">#{String(index + 1).padStart(2, '0')}</div>
+                        </div>
+                        <div className="qr-status-badge">
+                          <div className={`status-dot ${qrStatuses[qr.uid] || 'pending'}`}></div>
+                          <span className="status-text">{getStatusText(qrStatuses[qr.uid])}</span>
+                          {index === currentEngravingIndex && engravingStatus === 'running' && (
+                            <div className="current-indicator">
+                              <div className="pulse-dot"></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {numQRsToEngrave > 8 && (
+                      <div className="more-items">
+                        +{numQRsToEngrave - 8} more items in queue
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </>
-          )}
-          {status.status === 'paused' && (
-            <button className="engrave-btn" onClick={handleResume}>Resume</button>
-          )}
+            </div>
+          </div>
         </div>
-      )}
-      <div style={{marginTop:30, width:'100%'}}>
-        <h3 style={{textAlign:'center', color:'#2563eb', marginBottom:8}}>Items to Engrave</h3>
-        <ul style={{maxHeight:180, overflowY:'auto', padding:0, margin:0, listStyle:'none'}}>
-          {items.map(i => (
-            <li key={i.uid} style={{marginBottom:6, padding: '4px 0', borderBottom:'1px solid #e0e7ff'}}>
-              <b>{i.uid}</b> {i.qr_path && <span style={{color:'#64748b', fontSize:'0.97em'}}>({i.qr_path})</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
+      </main>
     </div>
   );
 }

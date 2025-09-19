@@ -100,6 +100,28 @@ def generate():
     conn.close()
     return jsonify({"success": True, "results": results})
 
+# API to get manufactured items
+@app.route("/items/manufactured", methods=["GET"])
+def get_manufactured_items():
+    limit = request.args.get('limit', 100, type=int)
+    try:
+        conn = mysql.connector.connect(**DB_CONFIG)
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT uid, component, vendor, lot, mfg_date, warranty_years, qr_path, created_at
+            FROM items 
+            ORDER BY created_at DESC 
+            LIMIT %s
+        """, (limit,))
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(items)
+    except mysql.connector.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
 # API to get QR image by UID
 @app.route("/api/qr/<uid>", methods=["GET"])
 def get_qr(uid):
