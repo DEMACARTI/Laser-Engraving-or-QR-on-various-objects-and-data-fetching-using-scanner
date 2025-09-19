@@ -27,10 +27,10 @@ OUTPUT_DIR = Path("qr_batch_output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 DB_CONFIG = {
-    "host": "127.0.0.1",
+    "host": "localhost",
     "port": 3306,
     "user": "root",        # 👈 change if using another user
-    "password": "0001",    # 👈 your MySQL password
+    "password": "alqawwiy",    # 👈 your MySQL password
     "database": "sih_qr_db"
 }
 
