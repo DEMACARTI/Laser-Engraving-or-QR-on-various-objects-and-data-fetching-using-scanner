@@ -23,23 +23,53 @@ export default function EngraveQRPage({ onBack }) {
 
   const fetchGeneratedQRs = async () => {
     try {
-      // Create mock data for demonstration since we have generated QR codes in the output folder
+      // Fetch actual manufactured items from the backend
+      const response = await axios.get('https://laser-engraving-or-qr-on-various-objects.onrender.com/items/manufactured', {
+        params: { limit: 100 } // Get up to 100 recent items
+      });
+      
+      if (response.data && response.data.length > 0) {
+        // Map the backend response to match the expected format
+        const qrItems = response.data.map(item => ({
+          uid: item.uid,
+          qr_path: item.qr_path,
+          component: item.component,
+          vendor: item.vendor,
+          lot: item.lot,
+          mfg_date: item.mfg_date,
+          created_at: item.created_at
+        }));
+        setGeneratedQRs(qrItems);
+      } else {
+        // Fallback to mock data if no items found
+        const mockQRs = [];
+        for (let i = 1; i <= 10; i++) {
+          mockQRs.push({
+            uid: `PAD-V0100-L2025-09-${String(i).padStart(5, '0')}`,
+            qr_path: `/api/qr/PAD-V0100-L2025-09-${String(i).padStart(5, '0')}`,
+            component: 'PAD',
+            vendor: 'V0100',
+            lot: 'L2025-09'
+          });
+        }
+        setGeneratedQRs(mockQRs);
+      }
+    } catch (err) {
+      console.error('Failed to fetch generated QR codes from API:', err);
+      setError('Failed to fetch generated QR codes from backend. Using mock data.');
+      
+      // Fallback to mock data on API error
       const mockQRs = [];
-      for (let i = 1; i <= 50; i++) {
+      for (let i = 1; i <= 10; i++) {
         mockQRs.push({
           uid: `PAD-V0100-L2025-09-${String(i).padStart(5, '0')}`,
-          qr_path: `../qr_batch_output/PAD-V0100-L2025-09-${String(i).padStart(5, '0')}.png`
-        });
-      }
-      for (let i = 1; i <= 30; i++) {
-        mockQRs.push({
-          uid: `ERC-V001-L2025-09-${String(i).padStart(5, '0')}`,
-          qr_path: `../qr_batch_output/ERC-V001-L2025-09-${String(i).padStart(5, '0')}.png`
+          qr_path: `/api/qr/PAD-V0100-L2025-09-${String(i).padStart(5, '0')}`,
+          component: 'PAD',
+          vendor: 'V0100',
+          lot: 'L2025-09'
         });
       }
       setGeneratedQRs(mockQRs);
-    } catch (err) {
-      setError('Failed to fetch generated QR codes.');
     }
   };
 
