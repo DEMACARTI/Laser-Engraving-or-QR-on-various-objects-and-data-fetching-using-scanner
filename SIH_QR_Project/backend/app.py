@@ -10,11 +10,11 @@ app = Flask(__name__)
 CORS(app)
 
 DB_CONFIG = {
-    "host": "mysql.railway.internal",
-    "port": 3306,
+    "host": "gondola.proxy.rlwy.net",
+    "port": 24442,
     "user": "root",
     "password": "SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd",
-    "database": "sih_qr_db"
+    "database": "railway"
 }
 
 # Test database connection on startup
