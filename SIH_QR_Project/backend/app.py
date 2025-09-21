@@ -10,10 +10,10 @@ app = Flask(__name__)
 CORS(app)
 
 DB_CONFIG = {
-    "host": "localhost",
+    "host": "mysql.railway.internal",
     "port": 3306,
     "user": "root",
-    "password": "alqawwiy",
+    "password": "SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd",
     "database": "sih_qr_db"
 }
 
