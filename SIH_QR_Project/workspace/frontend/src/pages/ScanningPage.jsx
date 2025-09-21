@@ -48,7 +48,7 @@ export default function ScanningPage() {
       const response = await axios.post('https://laser-engraving-or-qr-on-various-objects.onrender.com/scan', {
         uid: uid.trim()
       }, {
-        timeout: 3000  // 3 second timeout
+        timeout: 10000  // 10 second timeout for Render.com cold starts
       });
       
       console.log('✅ Backend response received:', response.data);
@@ -61,7 +61,12 @@ export default function ScanningPage() {
         setError(response.data.error || 'Item not found');
       }
     } catch (err) {
-      console.log('❌ Backend not available, using mock data. Error:', err.message);
+      console.error('❌ Backend error details:', {
+        message: err.message,
+        code: err.code,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       
       // Fallback to mock data when backend is not available
       const mockResponse = await simulateScanAPI(uid.trim());
