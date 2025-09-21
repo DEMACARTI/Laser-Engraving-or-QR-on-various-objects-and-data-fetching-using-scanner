@@ -14,10 +14,10 @@ import mysql.connector
 
 # ---------------- CONFIG ----------------
 DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', 'localhost'),
-    'port': int(os.environ.get('DB_PORT', 3306)),
+    'host': os.environ.get('DB_HOST', 'gondola.proxy.rlwy.net'),
+    'port': int(os.environ.get('DB_PORT', 24442)),
     'user': os.environ.get('DB_USER', 'root'),
-    'password': os.environ.get('DB_PASS', 'alqawwiy'),
+    'password': os.environ.get('DB_PASS', 'SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd'),
     'database': os.environ.get('DB_NAME', 'sih_qr_db')
 }
 

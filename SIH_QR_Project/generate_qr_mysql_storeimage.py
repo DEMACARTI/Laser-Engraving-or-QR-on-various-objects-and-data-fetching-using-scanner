@@ -27,10 +27,10 @@ OUTPUT_DIR = Path("qr_batch_output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 3306,
+    "host": "gondola.proxy.rlwy.net",
+    "port": 24442,
     "user": "root",        # 👈 change if using another user
-    "password": "alqawwiy",    # 👈 your MySQL password
+    "password": "SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd",    # 👈 your MySQL password
     "database": "sih_qr_db"
 }
 
