@@ -16,7 +16,7 @@ function App() {
     // Load options from backend API
     const loadOptions = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/options');
+        const response = await axios.get('https://laser-engraving-or-qr-on-various-objects.onrender.com/api/options');
         setOptions(response.data);
       } catch (err) {
         console.log('Backend not available, using fallback options');
@@ -45,7 +45,7 @@ function App() {
     
     try {
       // Call the actual backend API for QR generation
-      const response = await axios.post('http://localhost:5001/api/generate', {
+      const response = await axios.post('https://laser-engraving-or-qr-on-various-objects.onrender.com/api/generate', {
         component: form.component,
         vendor: form.vendor,
         lot: form.lot,
@@ -64,7 +64,7 @@ function App() {
       
       // Fallback to mock data if backend is not available
       if (err.code === 'ECONNREFUSED' || err.response?.status >= 500) {
-        setError("Backend service unavailable. Please start the backend server at http://localhost:5001");
+        setError("Backend service unavailable. Please check the backend server at https://laser-engraving-or-qr-on-various-objects.onrender.com");
         
         // Show mock results for demo purposes
         const mockResults = [];

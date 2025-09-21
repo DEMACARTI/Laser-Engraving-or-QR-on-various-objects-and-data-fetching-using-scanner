@@ -45,7 +45,7 @@ export default function ScanningPage() {
     try {
       console.log(`🔍 Attempting to scan UID: ${uid.trim()}`);
       // Try to connect to the actual scanning service first
-      const response = await axios.post('http://localhost:5001/scan', {
+      const response = await axios.post('https://laser-engraving-or-qr-on-various-objects.onrender.com/scan', {
         uid: uid.trim()
       }, {
         timeout: 3000  // 3 second timeout
