@@ -14,7 +14,7 @@ DB_CONFIG = {
     "port": 24442,
     "user": "root",
     "password": "SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd",
-    "database": "railway"
+    "database": "sih_qr_db"
 }
 
 # Test database connection on startup
