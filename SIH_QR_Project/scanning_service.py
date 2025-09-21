@@ -1,110 +1,180 @@
 """
 scanning_service.py
 
-Flask backend for QR scanning workflow:
-- Accepts a scanned UID.
-- Fetches item info from 'items' and the latest status from 'statuses'.
-- Computes expiry date as mfg_date + warranty_years.
+Features:
+1) /scan → fetch QR info + expiry calculation
+2) /allowed_statuses → check employee role & return allowed statuses
+3) /update_status → update status with audit logging
+
+DB: MySQL (sih_qr_db)
 """
 
-import os
-from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import mysql.connector
+from datetime import datetime, timedelta
 
-# ---------------- CONFIG ----------------
+# ---------------- DB CONFIG ----------------
 DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', 'gondola.proxy.rlwy.net'),
-    'port': int(os.environ.get('DB_PORT', 24442)),
-    'user': os.environ.get('DB_USER', 'root'),
-    'password': os.environ.get('DB_PASS', 'SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd'),
-    'database': os.environ.get('DB_NAME', 'sih_qr_db')
+    'host': '127.0.0.1',
+    'user': 'root',
+    'password': '0001',
+    'database': 'sih_qr_db'
 }
 
 def get_db_conn():
+    """Helper: create DB connection"""
     return mysql.connector.connect(**DB_CONFIG)
+
+# ---------------- ROLE → ALLOWED STATUSES ----------------
+ROLE_ALLOWED = {
+    "receiver": ["Received"],
+    "inspector": ["Inspected"],
+    "installer": ["Installed"],
+    "maintenance": ["Serviced", "Service Needed", "Replacement Needed", "Replaced", "Discarded"],
+    "admin": ["Manufactured","Received","Inspected","Installed","Serviced",
+              "Service Needed","Replacement Needed","Replaced","Discarded"]
+}
+
+def get_employee_role(emp_id):
+    """Fetch employee role from DB"""
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT role FROM employees WHERE id=%s", (emp_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else None
 
 # ---------------- FLASK APP ----------------
 app = Flask(__name__)
 
-# ---------------- ROUTES ----------------
-@app.route("/scan", methods=["POST"])
-def scan_uid():
+# -------- 1) SCAN ENDPOINT -----------------
+@app.route('/scan', methods=['POST'])
+def scan_qr():
     """
-    Body: { "uid": "UID-0001" }
-    Response: item details + latest status + expiry_date
+    Input: { "uid": "UID-0001" }
+    Output: details + calculated expiry date
     """
-    body = request.get_json(force=True)
-    uid = body.get("uid")
+    data = request.get_json(force=True)
+    uid = data.get("uid")
+
     if not uid:
-        return jsonify({"error": "Missing uid"}), 400
+        return jsonify({"error": "uid required"}), 400
 
-    sql = """
-    SELECT
-      i.uid,
-      i.component,
-      i.vendor,
-      i.lot,
-      i.mfg_date,
-      i.warranty_years,
-      DATE_ADD(i.mfg_date, INTERVAL COALESCE(i.warranty_years,0) YEAR) AS expiry_date,
-      latest.status AS current_status,
-      latest.updated_at AS status_updated_at
-    FROM items i
-    LEFT JOIN (
-      SELECT s1.uid, s1.status, s1.updated_at
-      FROM statuses s1
-      JOIN (
-        SELECT uid, MAX(updated_at) AS mu
-        FROM statuses
-        GROUP BY uid
-      ) s2 ON s1.uid = s2.uid AND s1.updated_at = s2.mu
-    ) latest ON latest.uid = i.uid
-    WHERE i.uid = %s
-    LIMIT 1
-    """
+    conn = get_db_conn()
+    cur = conn.cursor(dictionary=True)
 
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor(dictionary=True)
-        cur.execute(sql, (uid,))
-        row = cur.fetchone()
+        # Fetch item details
+        cur.execute("SELECT * FROM items WHERE uid=%s", (uid,))
+        item = cur.fetchone()
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+
+        # Calculate expiry = mfg_date + warranty_years
+        expiry_date = None
+        if item.get("mfg_date") and item.get("warranty_years"):
+            expiry_date = item["mfg_date"] + timedelta(days=365*item["warranty_years"])
+
+        # Fetch latest status
+        cur.execute("""
+            SELECT status, updated_at FROM statuses
+            WHERE uid=%s ORDER BY updated_at DESC LIMIT 1
+        """, (uid,))
+        status_row = cur.fetchone()
+
+        return jsonify({
+            "uid": uid,
+            "component": item.get("component_type"),
+            "vendor": item.get("vendor_id"),
+            "lot_no": item.get("lot_no"),
+            "serial_no": item.get("serial_no"),
+            "mfg_date": str(item.get("mfg_date")),
+            "warranty_years": item.get("warranty_years"),
+            "expiry_date": str(expiry_date) if expiry_date else None,
+            "current_status": status_row["status"] if status_row else item.get("current_status"),
+            "last_updated": str(status_row["updated_at"]) if status_row else None
+        })
+
+    finally:
         cur.close()
         conn.close()
 
-        if not row:
-            return jsonify({"ok": False, "error": "UID not found"}), 404
+# -------- 2) ALLOWED STATUSES ENDPOINT -----------------
+@app.route('/allowed_statuses', methods=['POST'])
+def allowed_statuses():
+    """
+    Input: { "employee_id": 2 }
+    Output: { "role": "inspector", "allowed": ["Inspected"] }
+    """
+    data = request.get_json(force=True)
+    emp_id = data.get("employee_id")
 
-        # Format dates nicely
-        def to_iso(dt_value):
-            if dt_value is None:
-                return None
-            if isinstance(dt_value, (datetime,)):
-                return dt_value.isoformat(sep=" ")
-            return str(dt_value)
+    if not emp_id:
+        return jsonify({"error": "employee_id required"}), 400
 
-        response = {
-            "ok": True,
-            "uid": row["uid"],
-            "component": row["component"],
-            "vendor": row["vendor"],
-            "lot": row["lot"],
-            "mfg_date": to_iso(row["mfg_date"]),
-            "warranty_years": row["warranty_years"],
-            "expiry_date": to_iso(row["expiry_date"]),
-            "current_status": row["current_status"],
-            "status_updated_at": to_iso(row["status_updated_at"])
-        }
-        return jsonify(response)
+    role = get_employee_role(emp_id)
+    if not role:
+        return jsonify({"error": "Invalid employee_id"}), 404
+
+    return jsonify({"role": role, "allowed": ROLE_ALLOWED.get(role, [])})
+
+# -------- 3) UPDATE STATUS ENDPOINT -----------------
+@app.route('/update_status', methods=['POST'])
+def update_status():
+    """
+    Input JSON: { "uid": "UID-0001", "new_status": "Inspected", "employee_id": 2, "note": "ok" }
+    - Inserts row in 'statuses'
+    - Updates 'items.current_status'
+    """
+    data = request.get_json(force=True)
+    uid = data.get("uid")
+    new_status = data.get("new_status")
+    employee_id = data.get("employee_id")
+    note = data.get("note", "")
+
+    if not uid or not new_status or not employee_id:
+        return jsonify({"error": "uid, new_status, employee_id required"}), 400
+
+    # Step 1: get role
+    role = get_employee_role(employee_id)
+    if not role:
+        return jsonify({"error": "Invalid employee"}), 403
+
+    # Step 2: check allowed statuses
+    allowed = ROLE_ALLOWED.get(role, [])
+    if new_status not in allowed:
+        return jsonify({
+            "error": f"Role '{role}' not allowed to set status '{new_status}'",
+            "allowed_statuses": allowed
+        }), 403
+
+    # Step 3: DB update
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Insert into statuses (audit log)
+        cur.execute("""
+            INSERT INTO statuses (uid, status, location, note, updated_at, employee_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (uid, new_status, "MobileApp", note, now, employee_id))
+
+        # Update items.current_status
+        cur.execute("UPDATE items SET current_status=%s WHERE uid=%s", (new_status, uid))
+
+        conn.commit()
+        return jsonify({"ok": True, "uid": uid, "new_status": new_status, "role": role})
 
     except Exception as e:
-        if conn:
-            conn.close()
-        return jsonify({"ok": False, "error": str(e)}), 500
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
-# ---------------- RUN SERVER ----------------
-if __name__ == "__main__":
-    print("Starting scanning_service...")
-    print("DB:", DB_CONFIG["host"], DB_CONFIG["database"])
-    app.run(host="0.0.0.0", port=5001, debug=True)
+# ---------------- MAIN ENTRY ----------------
+if __name__ == '__main__':
+    print("Starting scanning_service (with scan + modify status)...")
+    app.run(host='0.0.0.0', port=5001, debug=True)
