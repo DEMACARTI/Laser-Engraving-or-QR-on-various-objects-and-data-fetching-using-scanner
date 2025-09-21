@@ -352,7 +352,7 @@ export default function ScanningPage() {
 
   // QR Scanning Functions
   const scanQRFromVideo = () => {
-    if (!videoRef.current || !canvasRef.current || !cameraStream) {
+    if (!videoRef.current || !canvasRef.current || !cameraStream || scanCooldown) {
       return;
     }
 
@@ -360,9 +360,11 @@ export default function ScanningPage() {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    // Set canvas size to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Only update canvas size if it's different (performance optimization)
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
 
     if (canvas.width === 0 || canvas.height === 0) {
       return; // Video not ready yet
@@ -371,12 +373,20 @@ export default function ScanningPage() {
     // Draw current video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Get image data from canvas
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    // Get image data from canvas - use smaller region for better performance
+    const centerX = Math.floor(canvas.width * 0.2);
+    const centerY = Math.floor(canvas.height * 0.2);
+    const scanWidth = Math.floor(canvas.width * 0.6);
+    const scanHeight = Math.floor(canvas.height * 0.6);
+    
+    const imageData = context.getImageData(centerX, centerY, scanWidth, scanHeight);
 
-    // Scan for QR code
+    // Scan for QR code with optimized settings
     const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: "dontInvert"
+      inversionAttempts: "dontInvert",
+      locateOptions: {
+        tryHarder: false  // Faster scanning
+      }
     });
 
     if (qrCode) {
@@ -423,10 +433,21 @@ export default function ScanningPage() {
     
     setIsScanning(true);
     
-    // Scan every 100ms for smooth detection
-    scanIntervalRef.current = setInterval(() => {
-      scanQRFromVideo();
-    }, 100);
+    // Use requestAnimationFrame for better performance and smoother scanning
+    let frameCount = 0;
+    const scanFrame = () => {
+      if (!isScanning) return;
+      
+      // Skip frames for better performance (scan every 3rd frame)
+      frameCount++;
+      if (frameCount % 3 === 0) {
+        scanQRFromVideo();
+      }
+      
+      scanIntervalRef.current = requestAnimationFrame(scanFrame);
+    };
+    
+    scanIntervalRef.current = requestAnimationFrame(scanFrame);
   };
 
   const stopQRScanning = () => {
@@ -434,7 +455,7 @@ export default function ScanningPage() {
     setDetectedQR(null);
     
     if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
+      cancelAnimationFrame(scanIntervalRef.current);
       scanIntervalRef.current = null;
     }
   };
@@ -566,6 +587,14 @@ export default function ScanningPage() {
                       
                       {/* Camera Overlay */}
                       <div className="camera-overlay">
+                        {/* Optimized Scanning Area Indicator */}
+                        <div className="scan-area-overlay">
+                          <div className="scan-area-dim top"></div>
+                          <div className="scan-area-dim bottom"></div>
+                          <div className="scan-area-dim left"></div>
+                          <div className="scan-area-dim right"></div>
+                        </div>
+                        
                         <div className="scan-frame">
                           <div className="scan-corners">
                             <div className="corner top-left"></div>
@@ -574,6 +603,9 @@ export default function ScanningPage() {
                             <div className="corner bottom-right"></div>
                           </div>
                           <div className={`scan-line ${detectedQR ? 'qr-detected' : ''}`}></div>
+                          <div className="scan-instructions">
+                            <span>Position QR code in center area</span>
+                          </div>
                         </div>
                         
                         {/* QR Detection Highlight */}

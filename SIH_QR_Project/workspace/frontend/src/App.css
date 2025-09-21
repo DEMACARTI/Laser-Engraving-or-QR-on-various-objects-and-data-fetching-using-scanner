@@ -1750,12 +1750,70 @@ textarea,
   justify-content: center;
 }
 
+/* Optimized Scanning Area Overlay */
+.scan-area-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.scan-area-dim {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.scan-area-dim.top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 20%;
+}
+
+.scan-area-dim.bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20%;
+}
+
+.scan-area-dim.left {
+  top: 20%;
+  left: 0;
+  width: 20%;
+  height: 60%;
+}
+
+.scan-area-dim.right {  
+  top: 20%;
+  right: 0;
+  width: 20%;
+  height: 60%;
+}
+
 .scan-frame {
   position: relative;
   width: 200px;
   height: 200px;
   border: 2px solid rgba(59, 130, 246, 0.6);
   border-radius: var(--radius-md);
+}
+
+.scan-instructions {
+  position: absolute;
+  bottom: -35px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.9rem;
+  color: #3b82f6;
+  text-align: center;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 .scan-corners {
