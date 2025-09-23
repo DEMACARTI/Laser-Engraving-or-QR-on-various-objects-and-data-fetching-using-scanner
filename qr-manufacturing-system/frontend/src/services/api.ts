@@ -36,4 +36,8 @@ api.interceptors.response.use(
   }
 );
 
+// Export API URL for use in components
+export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
+
+// Export axios instance
 export default api;

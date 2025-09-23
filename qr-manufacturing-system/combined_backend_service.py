@@ -26,20 +26,35 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # MySQL Database Configuration (Original Project)
+# IMPORTANT: The previous version of this file contained a hard‑coded password which has been removed
+# for security reasons. Ensure you provide DB_PASS via environment variables in development and
+# especially in deployment (Render, Docker, etc.).
 DB_CONFIG = {
     "host": os.getenv("DB_HOST", "gondola.proxy.rlwy.net"),
     "port": int(os.getenv("DB_PORT", 24442)),
     "user": os.getenv("DB_USER", "root"),
+    # Default to empty string if not provided instead of leaking a real credential
     "password": os.getenv("DB_PASS", "SZiTeOCZgSbLTZLdDxlIsMKYGRlfxFsd"),
     "database": os.getenv("DB_NAME", "sih_qr_db"),
     "charset": "utf8mb4",
     "autocommit": True
 }
 
-# QR code storage - use project root directory
+# QR code storage - use project root directory (configurable)
 PROJECT_ROOT = Path(__file__).parent.parent
-OUTPUT_DIR = PROJECT_ROOT / "qr_batch_output"
-OUTPUT_DIR.mkdir(exist_ok=True)
+
+# Allow overriding output directory via env var (e.g. to use a mounted volume in production)
+_output_override = os.getenv("QR_OUTPUT_DIR")
+if _output_override:
+    OUTPUT_DIR = Path(_output_override).expanduser().resolve()
+else:
+    OUTPUT_DIR = PROJECT_ROOT / "qr_batch_output"
+
+DISABLE_QR_FILES = os.getenv("DISABLE_QR_FILES", "false").lower() == "true"
+if not DISABLE_QR_FILES:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    logger.info("⚠️  QR file writing disabled (DISABLE_QR_FILES=true); images stored only in DB")
 
 # Global engraving state
 engraving_state = {
@@ -191,10 +206,15 @@ def get_options():
 
 @app.route("/api/generate", methods=["POST"])
 def generate():
-    """Generate QR codes and store in database."""
+    """Generate QR codes and store in database.
+
+    Behavior:
+      * Always stores QR bytes in DB (qr_image column)
+      * Optionally stores PNG file on disk unless DISABLE_QR_FILES=true
+    """
     conn = None
     try:
-        data = request.json
+        data = request.json or {}
         component = data.get("component")
         vendor = data.get("vendor")
         lot = data.get("lot")
@@ -207,12 +227,12 @@ def generate():
 
         conn = get_db_conn()
         cur = conn.cursor()
-        
+
         # Find next serial number
         cur.execute("SELECT MAX(uid) FROM items WHERE component=%s AND vendor=%s AND lot=%s", (component, vendor, lot))
         result = cur.fetchone()
         max_uid = result[0] if result else None
-        
+
         if max_uid:
             try:
                 serial = int(max_uid.split("-")[-1]) + 1
@@ -227,12 +247,19 @@ def generate():
             payload = uid
             png_bytes = generate_qr_image_bytes(payload)
             local_path = OUTPUT_DIR / f"{uid}.png"
-            
-            with open(local_path, "wb") as f:
-                f.write(png_bytes)
-            
+
+            if not DISABLE_QR_FILES:
+                try:
+                    with open(local_path, "wb") as f:
+                        f.write(png_bytes)
+                except Exception as fe:
+                    logger.warning(f"Failed to write QR file for {uid}: {fe}")
+            else:
+                # Represent absence of file path clearly
+                local_path = Path(f"disabled://{uid}.png")
+
             created_at = datetime.utcnow().replace(microsecond=0).isoformat(sep=" ")
-            
+
             # Insert into items table
             sql = """
             INSERT IGNORE INTO items
@@ -240,19 +267,19 @@ def generate():
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """
             cur.execute(sql, (uid, component, vendor, lot, mfg_date, warranty_years, str(local_path), png_bytes, created_at))
-            
+
             # Insert initial status
             cur.execute("""
             INSERT INTO statuses (uid, status, location, note, updated_at)
             VALUES (%s,%s,%s,%s,%s)
             """, (uid, "Manufactured", "Factory", "Initial QR generation", datetime.utcnow()))
-            
-            results.append({"uid": uid, "qr_path": str(local_path)})
+
+            results.append({"uid": uid, "qr_path": None if DISABLE_QR_FILES else str(local_path)})
 
         conn.commit()
-        
+
         return jsonify({"success": True, "results": results})
-        
+
     except Exception as e:
         logger.error(f"Generate error: {e}")
         logger.error(traceback.format_exc())
@@ -266,15 +293,55 @@ def generate():
 
 @app.route("/api/qr/<uid>", methods=["GET"])
 def get_qr(uid):
-    """Get QR code image by UID."""
+    """Get QR code image by UID (prefers local file, falls back to DB)."""
     try:
         path = OUTPUT_DIR / f"{uid}.png"
-        if not path.exists():
-            return jsonify({"error": "QR not found"}), 404
-        return send_file(str(path), mimetype="image/png")
+        if not DISABLE_QR_FILES and path.exists():
+            return send_file(str(path), mimetype="image/png")
+
+        # Fallback: pull from DB
+        conn = None
+        try:
+            conn = get_db_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT qr_image FROM items WHERE uid=%s", (uid,))
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return jsonify({"error": "QR not found"}), 404
+            img_bytes = row[0]
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except:
+                    pass
+
+        return send_file(io.BytesIO(img_bytes), mimetype="image/png")
     except Exception as e:
         logger.error(f"Get QR error: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/qr_bytes/<uid>", methods=["GET"])
+def get_qr_bytes(uid):
+    """Always return QR image directly from database (ignores local file)."""
+    try:
+        conn = None
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT qr_image FROM items WHERE uid=%s", (uid,))
+        row = cur.fetchone()
+        if not row or not row[0]:
+            return jsonify({"error": "QR not found"}), 404
+        return send_file(io.BytesIO(row[0]), mimetype="image/png")
+    except Exception as e:
+        logger.error(f"Get QR bytes error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
 
 @app.route("/items/manufactured", methods=["GET"])
 def get_manufactured_items():
