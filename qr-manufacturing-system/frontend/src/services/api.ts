@@ -8,8 +8,20 @@ interface ApiErrorResponse {
   path?: string;
 }
 
-// Base API URL configuration
-const BASE_URL = process.env.REACT_APP_API_URL || 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+// Base API URL configuration with Vercel and local development support
+const BASE_URL = 
+  process.env.NEXT_PUBLIC_API_URL || 
+  process.env.REACT_APP_API_URL || 
+  'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+
+// Log environment variables in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('Environment Variables:', {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+    NODE_ENV: process.env.NODE_ENV
+  });
+}
 
 // Remove trailing /api if it exists in the environment variable
 const apiBaseUrl = BASE_URL.endsWith('/api') ? BASE_URL : `${BASE_URL}/api`;

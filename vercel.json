@@ -11,6 +11,7 @@
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com"
+    "NEXT_PUBLIC_API_URL": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com",
+    "NODE_ENV": "production"
   }
 }
