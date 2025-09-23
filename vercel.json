@@ -16,6 +16,19 @@
       "destination": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/api/:path*"
     }
   ],
+  "routes": [
+    { "handle": "filesystem" },
+    {
+      "src": "/manifest.json",
+      "dest": "/manifest.json",
+      "status": 200
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html",
+      "status": 200
+    }
+  ],
   "env": {
     "NEXT_PUBLIC_API_URL": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com",
     "NODE_ENV": "production"

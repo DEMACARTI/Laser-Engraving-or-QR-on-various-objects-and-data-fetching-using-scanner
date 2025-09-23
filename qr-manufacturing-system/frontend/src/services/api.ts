@@ -16,6 +16,15 @@ const BASE_URL =
     ? 'http://localhost:5002'
     : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com');
 
+// Log API configuration to help with debugging
+console.log('API Configuration:', {
+  currentHostname: window.location.hostname,
+  baseUrl: BASE_URL,
+  environment: process.env.NODE_ENV,
+  publicApiUrl: process.env.NEXT_PUBLIC_API_URL,
+  reactAppApiUrl: process.env.REACT_APP_API_URL
+});
+
 // Log configuration in development
 console.log('API Configuration:', {
   hostname: window.location.hostname,
@@ -36,7 +45,10 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: true // Enable credentials for CORS
+  withCredentials: false, // Disable credentials for CORS
+  validateStatus: (status) => {
+    return status < 500; // Handle all responses except server errors
+  }
 });
 
 // Add a retry mechanism
