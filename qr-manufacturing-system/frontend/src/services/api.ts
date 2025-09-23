@@ -1,9 +1,12 @@
 import axios from 'axios';
 
+// Log the API URL being used
+console.log('API URL:', process.env.REACT_APP_API_URL || 'http://localhost:5002/api');
+
 // Create axios instance with default configuration
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5002/api',
-  timeout: 10000,
+  timeout: 30000, // Increased timeout
   headers: {
     'Content-Type': 'application/json',
   },

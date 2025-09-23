@@ -19,18 +19,8 @@ import os
 import traceback
 
 app = Flask(__name__)
-# Configure CORS to allow requests from frontend deployment and local development
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "https://your-frontend.vercel.app",  # Replace with your Vercel domain
-            "http://localhost:3000",             # For local React development
-            "http://localhost:5173",             # For local Vite development
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+# Enable CORS for all origins during development
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -832,18 +822,40 @@ def scan_uid():
 def health_check():
     """Health check endpoint."""
     try:
-        db_status = "healthy" if test_db_connection() else "unhealthy"
+        # Test database connection
+        try:
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            conn.close()
+            db_status = "healthy"
+            db_error = None
+        except Exception as db_e:
+            db_status = "unhealthy"
+            db_error = str(db_e)
+            logger.error(f"Database health check failed: {db_e}")
         
-        return jsonify({
+        response = {
             "status": "healthy" if db_status == "healthy" else "degraded",
-            "database": db_status,
+            "database": {
+                "status": db_status,
+                "host": DB_CONFIG["host"],
+                "port": DB_CONFIG["port"],
+                "error": db_error
+            },
             "engraving_status": engraving_state["status"],
             "worker_running": worker_running,
             "timestamp": datetime.utcnow().isoformat(),
             "version": "1.0.0"
-        })
+        }
+        
+        logger.info(f"Health check response: {response}")
+        return jsonify(response)
     except Exception as e:
         logger.error(f"Health check error: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/stats", methods=["GET"])
@@ -867,7 +879,8 @@ def get_stats():
 def root():
     """Root endpoint."""
     try:
-        return jsonify({
+        logger.info("Root endpoint accessed")
+        response = {
             "message": "QR Manufacturing System - Combined Backend Service",
             "version": "1.0.0",
             "status": "running",
@@ -877,11 +890,18 @@ def root():
                 "scanning": "/scan",
                 "health": "/health"
             },
+            "environment": {
+                "database": DB_CONFIG["host"],
+                "database_port": DB_CONFIG["port"]
+            },
             "timestamp": datetime.utcnow().isoformat()
-        })
+        }
+        logger.info(f"Sending response: {response}")
+        return jsonify(response)
     except Exception as e:
         logger.error(f"Root endpoint error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500 jsonify({"error": str(e)}), 500
 
 def cleanup_worker():
     """Clean up worker thread on exit."""
