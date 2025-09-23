@@ -1,12 +1,39 @@
 """
-Combined Backend Service - Original Project Functionality with MySQL Integration.
+Combined Backend Sapp = Flask(__name__, static_folder=None)  # Disable default static handling
+# Enable CORS for all origins during development
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
+# Configure logging
+
+# Add favicon route to prevent 404s
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # No content response
+
+# Add error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({"error": "Not found", "message": str(error)}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal server error: {error}")
+    logger.error(traceback.format_exc())
+    return jsonify({"error": "Internal server error", "message": str(error)}), 500ginal Project Functionality with MySQL Integration.
 
 This service combines all the original project functionality (QR generation, 
 engraving, scanning) into a single Flask application for easier deployment.
 """
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, current_app
 from flask_cors import CORS
+from dotenv import load_dotenv
 import qrcode
 import io
 import mysql.connector
@@ -17,10 +44,18 @@ import time
 import logging
 import os
 import traceback
+import atexit
 
 app = Flask(__name__)
 # Enable CORS for all origins during development
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -296,9 +331,17 @@ def generate():
 def get_qr(uid):
     """Get QR code image by UID (prefers local file, falls back to DB)."""
     try:
+        if not uid:
+            return jsonify({"error": "UID is required"}), 400
+
+        # Try local file first
         path = OUTPUT_DIR / f"{uid}.png"
         if not DISABLE_QR_FILES and path.exists():
-            return send_file(str(path), mimetype="image/png")
+            try:
+                return send_file(str(path), mimetype="image/png")
+            except Exception as e:
+                logger.error(f"Failed to serve local file for {uid}: {e}")
+                # Fall through to DB retrieval
 
         # Fallback: pull from DB
         conn = None
@@ -310,16 +353,17 @@ def get_qr(uid):
             if not row or not row[0]:
                 return jsonify({"error": "QR not found"}), 404
             img_bytes = row[0]
+            return send_file(io.BytesIO(img_bytes), mimetype="image/png")
         finally:
             if conn:
                 try:
                     conn.close()
-                except:
-                    pass
+                except Exception as e:
+                    logger.error(f"Error closing DB connection: {e}")
 
-        return send_file(io.BytesIO(img_bytes), mimetype="image/png")
     except Exception as e:
         logger.error(f"Get QR error: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/qr_bytes/<uid>", methods=["GET"])
@@ -880,28 +924,50 @@ def root():
     """Root endpoint."""
     try:
         logger.info("Root endpoint accessed")
+        # Test database connection
+        db_status = "healthy" if test_db_connection() else "unhealthy"
+        
         response = {
-            "message": "QR Manufacturing System - Combined Backend Service",
+            "service": "QR Manufacturing System - Combined Backend Service",
             "version": "1.0.0",
             "status": "running",
-            "endpoints": {
-                "qr_generation": "/api/generate",
-                "engraving": "/engrave/start",
-                "scanning": "/scan",
-                "health": "/health"
+            "api_endpoints": {
+                "qr": {
+                    "generate": "/api/generate",
+                    "get_qr": "/api/qr/<uid>",
+                    "get_qr_bytes": "/api/qr_bytes/<uid>"
+                },
+                "engraving": {
+                    "start": "/engrave/start",
+                    "stop": "/engrave/stop",
+                    "pause": "/engrave/pause",
+                    "resume": "/engrave/resume",
+                    "status": "/engrave/status"
+                },
+                "inventory": {
+                    "items": "/inventory/items",
+                    "stats": "/inventory/stats",
+                    "search": "/inventory/search"
+                },
+                "monitoring": {
+                    "health": "/health",
+                    "stats": "/stats"
+                }
             },
             "environment": {
-                "database": DB_CONFIG["host"],
-                "database_port": DB_CONFIG["port"]
+                "qr_storage": "database" if DISABLE_QR_FILES else "file+database",
+                "database_status": db_status,
+                "database_host": DB_CONFIG["host"],
+                "worker_status": "running" if worker_running else "stopped"
             },
             "timestamp": datetime.utcnow().isoformat()
         }
-        logger.info(f"Sending response: {response}")
+        logger.info(f"Root endpoint response successful")
         return jsonify(response)
     except Exception as e:
         logger.error(f"Root endpoint error: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500 jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 def cleanup_worker():
     """Clean up worker thread on exit."""

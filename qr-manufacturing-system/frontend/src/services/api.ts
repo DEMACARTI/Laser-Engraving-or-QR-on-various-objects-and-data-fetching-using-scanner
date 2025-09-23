@@ -1,46 +1,96 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
-// Log the API URL being used
-console.log('API URL:', process.env.REACT_APP_API_URL || 'http://localhost:5002/api');
+// Define error response type
+interface ApiErrorResponse {
+  message: string;
+  status: number;
+  timestamp: string;
+  path?: string;
+}
 
-// Create axios instance with default configuration
+// Base API URL configuration
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
+
+// Create axios instance with configuration
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5002/api',
-  timeout: 30000, // Increased timeout
+  baseURL: BASE_URL,
+  timeout: 30000, // 30 seconds
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
 });
 
-// Request interceptor for adding auth token
+// Development logger
+const logApiOperation = (type: string, data: unknown): void => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`API ${type.toUpperCase()}:`, data);
+  }
+};
+
+// Log initial configuration
+logApiOperation('config', {
+  baseURL: BASE_URL,
+  environment: process.env.NODE_ENV,
+  timestamp: new Date().toISOString(),
+});
+
+// Request interceptor for authentication and logging
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+    // Add auth token if available
     const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Log request in development
+    logApiOperation('request', {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      data: config.data,
+    });
+    
     return config;
   },
-  (error) => {
+  (error: AxiosError): Promise<AxiosError> => {
+    logApiOperation('error', error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor for handling common errors
+// Response interceptor for error handling and logging
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response: AxiosResponse): AxiosResponse => {
+    logApiOperation('response', {
+      status: response.status,
+      data: response.data,
+      url: response.config.url,
+    });
+    return response;
+  },
+  (error: AxiosError<ApiErrorResponse>): Promise<AxiosError> => {
+    const errorResponse: ApiErrorResponse = {
+      message: error.response?.data?.message || 'An unexpected error occurred',
+      status: error.response?.status || 500,
+      timestamp: new Date().toISOString(),
+      path: error.config?.url,
+    };
+
+    // Handle unauthorized access
     if (error.response?.status === 401) {
-      // Handle unauthorized access
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
     }
-    return Promise.reject(error);
+
+    logApiOperation('error', errorResponse);
+    return Promise.reject(errorResponse);
   }
 );
 
-// Export API URL for use in components
-export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
+// Export the base URL for use in other files
+export const API_URL = BASE_URL;
 
-// Export axios instance
+// Export the configured axios instance
 export default api;
