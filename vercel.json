@@ -10,6 +10,12 @@
       ]
     }
   ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/api/:path*"
+    }
+  ],
   "env": {
     "NEXT_PUBLIC_API_URL": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com",
     "NODE_ENV": "production"

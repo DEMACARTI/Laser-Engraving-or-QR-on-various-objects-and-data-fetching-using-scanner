@@ -12,16 +12,18 @@ interface ApiErrorResponse {
 const BASE_URL = 
   process.env.NEXT_PUBLIC_API_URL || 
   process.env.REACT_APP_API_URL || 
-  'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+  (window.location.hostname === 'localhost' 
+    ? 'http://localhost:5002'
+    : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com');
 
-// Log environment variables in development
-if (process.env.NODE_ENV === 'development') {
-  console.log('Environment Variables:', {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
-    NODE_ENV: process.env.NODE_ENV
-  });
-}
+// Log configuration in development
+console.log('API Configuration:', {
+  hostname: window.location.hostname,
+  BASE_URL,
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  NODE_ENV: process.env.NODE_ENV
+});
 
 // Remove trailing /api if it exists in the environment variable
 const apiBaseUrl = BASE_URL.endsWith('/api') ? BASE_URL : `${BASE_URL}/api`;
@@ -33,9 +35,29 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,PUT,POST,DELETE,PATCH,OPTIONS',
+    'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept'
   },
-  // Enable CORS credentials
-  withCredentials: false,
+  withCredentials: false
+});
+
+// Add a retry mechanism
+api.interceptors.response.use(undefined, async (error) => {
+  if (error.config && error.response && (error.response.status === 429 || error.response.status === 503)) {
+    // Retry the request up to 3 times with exponential backoff
+    const backoff = new Promise((resolve) => {
+      setTimeout(resolve, 1000 * Math.pow(2, error.config.__retryCount || 0));
+    });
+    
+    error.config.__retryCount = (error.config.__retryCount || 0) + 1;
+    
+    if (error.config.__retryCount <= 3) {
+      await backoff;
+      return api(error.config);
+    }
+  }
+  return Promise.reject(error);
 });
 
 // Development logger
