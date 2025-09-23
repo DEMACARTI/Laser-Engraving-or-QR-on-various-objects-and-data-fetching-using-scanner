@@ -19,7 +19,18 @@ import os
 import traceback
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS to allow requests from frontend deployment and local development
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://your-frontend.vercel.app",  # Replace with your Vercel domain
+            "http://localhost:3000",             # For local React development
+            "http://localhost:5173",             # For local Vite development
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
