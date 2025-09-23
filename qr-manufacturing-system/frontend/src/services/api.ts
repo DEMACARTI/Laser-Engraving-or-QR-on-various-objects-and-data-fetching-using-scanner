@@ -9,7 +9,7 @@ interface ApiErrorResponse {
 }
 
 // Base API URL configuration
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
+const BASE_URL = process.env.REACT_APP_API_URL || 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/api';
 
 // Create axios instance with configuration
 const api = axios.create({
