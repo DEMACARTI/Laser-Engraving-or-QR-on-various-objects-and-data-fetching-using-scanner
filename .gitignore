@@ -86,3 +86,5 @@ MANIFEST
 # Build directories
 build/
 dist/
+\n+# Generated QR code image output directory (runtime artifacts, do not commit)
+qr_batch_output/

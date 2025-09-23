@@ -69,7 +69,7 @@ const QRGeneration: React.FC = () => {
     const loadOptions = async () => {
       try {
         // Try to load from backend API
-        const response = await fetch('http://localhost:5001/api/options');
+        const response = await fetch('http://localhost:5002/api/options');
         if (response.ok) {
           const data = await response.json();
           setOptions(data);
@@ -113,7 +113,7 @@ const QRGeneration: React.FC = () => {
       }, 200);
 
       // Call the actual backend API for QR generation
-      const response = await fetch('http://localhost:5001/api/generate', {
+      const response = await fetch('http://localhost:5002/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

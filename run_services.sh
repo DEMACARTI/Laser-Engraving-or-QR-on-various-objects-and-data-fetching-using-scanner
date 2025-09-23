@@ -8,6 +8,10 @@ echo "=============================================="
 echo "🧹 Cleaning up existing processes..."
 lsof -ti:5002 | xargs kill -9 2>/dev/null || true
 lsof -ti:8004 | xargs kill -9 2>/dev/null || true
+lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+
+# Wait for ports to be freed
+sleep 2
 
 # Navigate to project root
 cd /Users/dakshrathore/Laser-Engraving-or-QR-on-various-objects-and-data-fetching-using-scanner-main
@@ -44,6 +48,5 @@ echo "   Items: http://localhost:5002/items/manufactured"
 echo ""
 echo "🎯 Frontend should now work correctly!"
 echo ""
-echo "Press Enter to stop all services..."
-read
+
 
