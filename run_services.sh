@@ -47,7 +47,3 @@ echo ""
 echo "Press Enter to stop all services..."
 read
 
-echo "🛑 Stopping services..."
-kill $BACKEND_PID 2>/dev/null || true
-kill $ENGRAVING_PID 2>/dev/null || true
-echo "👋 All services stopped!"
