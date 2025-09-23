@@ -9,16 +9,21 @@ interface ApiErrorResponse {
 }
 
 // Base API URL configuration
-const BASE_URL = process.env.REACT_APP_API_URL || 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/api';
+const BASE_URL = process.env.REACT_APP_API_URL || 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+
+// Remove trailing /api if it exists in the environment variable
+const apiBaseUrl = BASE_URL.endsWith('/api') ? BASE_URL : `${BASE_URL}/api`;
 
 // Create axios instance with configuration
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: apiBaseUrl,
   timeout: 30000, // 30 seconds
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  // Enable CORS credentials
+  withCredentials: false,
 });
 
 // Development logger
