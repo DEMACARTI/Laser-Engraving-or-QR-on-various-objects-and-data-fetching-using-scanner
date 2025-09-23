@@ -8,34 +8,16 @@ interface ApiErrorResponse {
   path?: string;
 }
 
-// Base API URL configuration with Vercel and local development support
-const BASE_URL = 
-  process.env.NEXT_PUBLIC_API_URL || 
-  process.env.REACT_APP_API_URL || 
-  (window.location.hostname === 'localhost' 
-    ? 'http://localhost:5002'
-    : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com');
+// Base API URL configuration - always use Render backend
+const BASE_URL = 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+const apiBaseUrl = `${BASE_URL}/api`;
 
-// Log API configuration to help with debugging
+// Log API configuration
 console.log('API Configuration:', {
-  currentHostname: window.location.hostname,
   baseUrl: BASE_URL,
-  environment: process.env.NODE_ENV,
-  publicApiUrl: process.env.NEXT_PUBLIC_API_URL,
-  reactAppApiUrl: process.env.REACT_APP_API_URL
+  apiEndpoint: apiBaseUrl,
+  environment: process.env.NODE_ENV
 });
-
-// Log configuration in development
-console.log('API Configuration:', {
-  hostname: window.location.hostname,
-  BASE_URL,
-  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
-  NODE_ENV: process.env.NODE_ENV
-});
-
-// Remove trailing /api if it exists in the environment variable
-const apiBaseUrl = BASE_URL.endsWith('/api') ? BASE_URL : `${BASE_URL}/api`;
 
 // Create axios instance with configuration
 const api = axios.create({
@@ -45,29 +27,49 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: false, // Disable credentials for CORS
   validateStatus: (status) => {
-    return status < 500; // Handle all responses except server errors
+    return status >= 200 && status < 500; // Accept all responses except server errors
   }
 });
 
-// Add a retry mechanism
-api.interceptors.response.use(undefined, async (error) => {
-  if (error.config && error.response && (error.response.status === 429 || error.response.status === 503)) {
-    // Retry the request up to 3 times with exponential backoff
-    const backoff = new Promise((resolve) => {
-      setTimeout(resolve, 1000 * Math.pow(2, error.config.__retryCount || 0));
-    });
-    
-    error.config.__retryCount = (error.config.__retryCount || 0) + 1;
-    
-    if (error.config.__retryCount <= 3) {
-      await backoff;
-      return api(error.config);
-    }
+// Request interceptor
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    console.log(`Making ${config.method?.toUpperCase()} request to: ${config.baseURL}${config.url}`);
+    return config;
+  },
+  (error) => {
+    console.error('Request error:', error);
+    return Promise.reject(error);
   }
-  return Promise.reject(error);
-});
+);
+
+// Response interceptor with error handling and logging
+api.interceptors.response.use(
+  (response: AxiosResponse) => {
+    console.log(`Response from ${response.config.url}:`, {
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
+  (error: AxiosError<ApiErrorResponse>) => {
+    console.error('Response error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.response?.data?.message || error.message
+    });
+
+    // Handle specific error cases
+    if (error.response?.status === 401) {
+      // Handle unauthorized
+      console.log('Unauthorized access, redirecting to login');
+      window.location.href = '/login';
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Development logger
 const logApiOperation = (type: string, data: unknown): void => {
