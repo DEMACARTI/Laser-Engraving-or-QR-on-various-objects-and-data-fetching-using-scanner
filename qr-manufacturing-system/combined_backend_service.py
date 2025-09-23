@@ -19,13 +19,41 @@ def favicon():
 # Add error handlers
 @app.errorhandler(404)
 def not_found_error(error):
-    return jsonify({"error": "Not found", "message": str(error)}), 404
+    response = jsonify({"error": "Not found", "message": str(error)})
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response, 404
 
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal server error: {error}")
     logger.error(traceback.format_exc())
-    return jsonify({"error": "Internal server error", "message": str(error)}), 500ginal Project Functionality with MySQL Integration.
+    response = jsonify({"error": "Internal server error", "message": str(error)})
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response, 500
+
+# Add CORS error handler
+@app.errorhandler(Exception)
+def handle_exception(error):
+    if isinstance(error, mysql.connector.Error):
+        status_code = 500
+        message = "Database error occurred"
+    else:
+        status_code = 500
+        message = str(error)
+    
+    response = jsonify({
+        "error": type(error).__name__,
+        "message": message,
+        "success": False
+    })
+    
+    # Add CORS headers to error responses
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
+    return response, status_codeginal Project Functionality with MySQL Integration.
 
 This service combines all the original project functionality (QR generation, 
 engraving, scanning) into a single Flask application for easier deployment.
@@ -47,7 +75,33 @@ import traceback
 import atexit
 
 app = Flask(__name__)
-# Enable CORS for all origins during development
+
+# Configure CORS properly
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "https://laser-engraving-qr.vercel.app"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 120  # Cache preflight requests for 2 minutes
+    }
+})
+
+# Add OPTIONS handler for all routes
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    response = app.make_default_options_response()
+    
+    # Add required CORS headers
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin, X-Requested-With'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Max-Age'] = '120'
+    
+    return response
 CORS(app, resources={
     r"/*": {
         "origins": "*",
