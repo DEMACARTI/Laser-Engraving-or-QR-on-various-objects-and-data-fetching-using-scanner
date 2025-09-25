@@ -4,7 +4,29 @@
 /* Center the page content within a comfortable max width */
 .container {
 	max-width: 1200px;
-	margin: 0 auto;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+/* Visually center relative to full viewport (including the 240px sidebar) */
+.offsetCenter {
+	transform: translateX(calc(-1 * var(--drawer-width, 240px) / 2));
+	will-change: transform;
+}
+
+@media (max-width: 1200px) {
+	.offsetCenter {
+		transform: none; /* avoid crowding on smaller screens */
+	}
+}
+
+/* Lively gradient title for page heading */
+.title {
+	font-weight: 600;
+	background: linear-gradient(135deg, #1976d2, #115293);
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
 }
 
 /* Even, roomy spacing for KPI cards and chart papers */

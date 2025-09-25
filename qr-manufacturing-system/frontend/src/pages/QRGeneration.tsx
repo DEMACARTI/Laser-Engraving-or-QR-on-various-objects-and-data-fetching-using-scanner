@@ -196,7 +196,7 @@ const QRGeneration: React.FC = () => {
 
   return (
     <Box className={styles.root}>
-      <div className={styles.container}>
+      <div className={`${styles.container} ${styles.offsetCenter}`}>
       <Typography variant="h4" gutterBottom>
         QR Code Generation
       </Typography>

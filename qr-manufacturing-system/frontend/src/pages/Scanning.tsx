@@ -333,8 +333,8 @@ const Scanning = () => {
     
     return {
       success: false,
-      uid: uid,
-      error: 'UID not found in database'
+      uid,
+      error: 'UID not found in mock data'
     };
   };
 
@@ -389,9 +389,10 @@ const Scanning = () => {
 
   return (
     <Box className={styles.root}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
-        🔍 QR Code Scanner
-      </Typography>
+      <div className={`${styles.container} ${styles.offsetCenter}`}>
+        <Typography variant="h4" gutterBottom className={styles.title} sx={{ mb: 3, fontWeight: 'bold' }}>
+          🔍 QR Code Scanner
+        </Typography>
 
       <Grid container spacing={3} className={styles.section}>
         {/* Scanner Section */}
@@ -758,6 +759,7 @@ const Scanning = () => {
           }
         `}
       </style>
+      </div>
     </Box>
   );
 };

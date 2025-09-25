@@ -117,6 +117,7 @@ const App: React.FC = () => {
                   p: { xs: 2, sm: 3, md: 4 },
                   marginTop: '64px', // Height of AppBar
                   marginLeft: sidebarOpen ? '240px' : '0px', // Width of Sidebar
+                  '--drawer-width': sidebarOpen ? '240px' : '0px', // expose for page-level centering adjustments
                   transition: theme.transitions.create(['margin'], {
                     easing: theme.transitions.easing.sharp,
                     duration: theme.transitions.duration.leavingScreen,

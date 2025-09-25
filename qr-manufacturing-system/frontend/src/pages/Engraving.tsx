@@ -238,9 +238,10 @@ const Engraving: React.FC = () => {
 
   return (
     <Box className={styles.root}>
-      <Typography variant="h4" gutterBottom>
-        Laser Engraving System
-      </Typography>
+      <div className={`${styles.container} ${styles.offsetCenter}`}>
+        <Typography variant="h4" gutterBottom className={styles.title}>
+          Laser Engraving System
+        </Typography>
 
       <Grid container spacing={3} className={styles.section}>
         {/* Control Panel */}
@@ -441,6 +442,7 @@ const Engraving: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+      </div>
     </Box>
   );
 };

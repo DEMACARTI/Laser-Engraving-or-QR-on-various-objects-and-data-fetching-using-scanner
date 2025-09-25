@@ -142,10 +142,11 @@ const Inventory: React.FC = () => {
 
   return (
     <Box className={styles.root}>
-      <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <InventoryIcon />
-        Inventory Management
-      </Typography>
+      <div className={`${styles.container} ${styles.offsetCenter}`}>
+        <Typography variant="h4" gutterBottom className={styles.title} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <InventoryIcon />
+          Inventory Management
+        </Typography>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -153,8 +154,8 @@ const Inventory: React.FC = () => {
         </Alert>
       )}
 
-      {/* Stats */}
-      <Grid container spacing={3} className={styles.section}>
+  {/* Stats */}
+  <Grid container spacing={3} className={styles.section}>
         <Grid item xs={12} sm={6} md={4}>
           <Card className={styles.paper}>
             <CardContent>
@@ -193,8 +194,8 @@ const Inventory: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Search */}
-      <Paper className={styles.paper} sx={{ mb: 2 }}>
+  {/* Search */}
+  <Paper className={styles.paper} sx={{ mb: 2 }}>
         <TextField
           fullWidth
           label="Search by UID, Component, or Vendor"
@@ -206,8 +207,8 @@ const Inventory: React.FC = () => {
         />
       </Paper>
 
-      {/* Data Grid */}
-      <Paper className={styles.paper} sx={{ height: 600, width: '100%' }}>
+  {/* Data Grid */}
+  <Paper className={styles.paper} sx={{ height: 600, width: '100%' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
             <CircularProgress />
@@ -227,6 +228,7 @@ const Inventory: React.FC = () => {
           />
         )}
       </Paper>
+      </div>
     </Box>
   );
 };

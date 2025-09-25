@@ -54,8 +54,8 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box className={styles.root}>
-      <div className={styles.container}>
-        <Typography variant="h4" gutterBottom>
+      <div className={`${styles.container} ${styles.offsetCenter}`}>
+        <Typography variant="h4" gutterBottom className={styles.title}>
           Dashboard
         </Typography>
       

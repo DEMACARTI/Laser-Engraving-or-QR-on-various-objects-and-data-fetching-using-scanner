@@ -7,6 +7,20 @@
 	background: var(--mui-palette-background-default, #f7f9fc);
 }
 
+.container {
+	max-width: 1200px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.offsetCenter {
+	transform: translateX(calc(-1 * var(--drawer-width, 240px) / 2));
+}
+
+@media (max-width: 1200px) {
+	.offsetCenter { transform: none; }
+}
+
 .section { margin-bottom: 24px; }
 
 .paper {
@@ -28,6 +42,14 @@
 
 .cardContent {
 	padding: 20px 24px !important;
+}
+
+.title {
+	font-weight: 600;
+	background: linear-gradient(135deg, #1976d2, #115293);
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
 }
 
 @media (max-width: 600px) {

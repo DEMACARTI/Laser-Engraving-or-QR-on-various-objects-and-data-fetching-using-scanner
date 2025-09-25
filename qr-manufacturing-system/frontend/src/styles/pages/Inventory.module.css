@@ -7,6 +7,20 @@
 	background: var(--mui-palette-background-default, #f7f9fc);
 }
 
+.container {
+	max-width: 1200px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.offsetCenter {
+	transform: translateX(calc(-1 * var(--drawer-width, 240px) / 2));
+}
+
+@media (max-width: 1200px) {
+	.offsetCenter { transform: none; }
+}
+
 .section { margin-bottom: 24px; }
 
 .paper {
@@ -15,6 +29,14 @@
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
 	border-radius: 12px;
 	padding: 16px;
+}
+
+.title {
+	font-weight: 600;
+	background: linear-gradient(135deg, #1976d2, #115293);
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
 }
 
 @media (max-width: 600px) {

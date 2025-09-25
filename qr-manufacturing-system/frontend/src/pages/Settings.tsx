@@ -101,9 +101,10 @@ const Settings: React.FC = () => {
 
   return (
     <Box className={styles.root}>
-      <Typography variant="h4" gutterBottom>
-        System Settings
-      </Typography>
+      <div className={`${styles.container} ${styles.offsetCenter}`}>
+        <Typography variant="h4" gutterBottom className={styles.title}>
+          System Settings
+        </Typography>
 
   <Paper className={styles.paper} sx={{ width: '100%' }}>
         <Tabs
@@ -444,6 +445,7 @@ const Settings: React.FC = () => {
           </Grid>
         </Box>
       </Paper>
+      </div>
     </Box>
   );
 };
