@@ -33,7 +33,7 @@ const Inventory: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const API_BASE = 'http://localhost:5002';
+  const API_BASE = 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
 
   // Fetch inventory data from database
   const fetchInventoryData = async () => {

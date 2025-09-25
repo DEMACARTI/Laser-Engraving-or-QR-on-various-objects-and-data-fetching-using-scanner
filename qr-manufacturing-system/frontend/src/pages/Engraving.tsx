@@ -63,7 +63,7 @@ const Engraving: React.FC = () => {
   const fetchGeneratedQRs = async () => {
     try {
       // Fetch actual manufactured items from the backend
-      const response = await fetch('http://localhost:5002/items/manufactured?limit=100');
+      const response = await fetch('https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/items/manufactured?limit=5000');
       
       if (response.ok) {
         const data = await response.json();

@@ -18,7 +18,7 @@ npm run dev
 
 Create a `.env.local` file with the following variables:
 ```
-REACT_APP_API_URL=http://localhost:5002/api
+REACT_APP_API_URL=https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/api
 ```
 
 For production, set these in your Vercel project settings.
