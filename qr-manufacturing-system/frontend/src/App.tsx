@@ -20,44 +20,59 @@ import Settings from './pages/Settings';
 const theme = createTheme({
   palette: {
     mode: 'light',
-    primary: {
-      main: '#1976d2',
-      light: '#42a5f5',
-      dark: '#1565c0',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f5f5f5',
-      paper: '#ffffff',
-    },
+    primary: { main: '#0b5fff', light: '#4c82ff', dark: '#0646bf' },
+    secondary: { main: '#6e6e73' },
+    background: { default: '#f7f9fc', paper: '#ffffff' },
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 500,
-    },
+    fontFamily: '"SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"',
+    h1: { fontWeight: 600, letterSpacing: '0.2px', fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    h2: { fontWeight: 600, letterSpacing: '0.2px', fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    h3: { fontWeight: 600, letterSpacing: '0.2px', fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    h4: { fontWeight: 500, letterSpacing: '0.15px', fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    h5: { fontWeight: 500, letterSpacing: '0.15px', fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    h6: { fontWeight: 500, letterSpacing: '0.15px' },
+    subtitle1: { fontWeight: 500, letterSpacing: '0.15px' },
+    subtitle2: { fontWeight: 500, letterSpacing: '0.15px' },
+    body1: { lineHeight: 1.65, letterSpacing: '0.1px' },
+    body2: { lineHeight: 1.65, letterSpacing: '0.1px' },
+    caption: { letterSpacing: '0.2px' },
+    overline: { letterSpacing: '0.3px' },
   },
   components: {
-    MuiDrawer: {
+    MuiCssBaseline: {
       styleOverrides: {
-        paper: {
-          backgroundColor: '#1e293b',
-          color: '#fff',
+        html: {
+          WebkitFontSmoothing: 'antialiased',
+          MozOsxFontSmoothing: 'grayscale',
+        },
+        body: {
+          WebkitFontSmoothing: 'antialiased',
+          MozOsxFontSmoothing: 'grayscale',
+          textRendering: 'optimizeLegibility',
         },
       },
     },
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#1e293b',
-        },
-      },
+    MuiPaper: { 
+      styleOverrides: { 
+        root: { 
+          borderRadius: 14,
+          boxShadow: '0 1px 4px rgba(16,24,40,0.05), 0 1px 1px rgba(16,24,40,0.03)',
+          border: '1px solid rgba(16,24,40,0.06)',
+        } 
+      } 
     },
+    MuiCard: { 
+      styleOverrides: { 
+        root: { 
+          borderRadius: 14,
+          boxShadow: '0 1px 4px rgba(16,24,40,0.05), 0 1px 1px rgba(16,24,40,0.03)',
+          border: '1px solid rgba(16,24,40,0.06)',
+        } 
+      } 
+    },
+    MuiButton: { styleOverrides: { root: { borderRadius: 10, textTransform: 'none', fontWeight: 500 } } },
+    MuiContainer: { styleOverrides: { root: { paddingLeft: 24, paddingRight: 24 } } },
   },
 });
 
@@ -99,7 +114,7 @@ const App: React.FC = () => {
                 sx={{
                   flexGrow: 1,
                   bgcolor: 'background.default',
-                  p: 3,
+                  p: { xs: 2, sm: 3, md: 4 },
                   marginTop: '64px', // Height of AppBar
                   marginLeft: sidebarOpen ? '240px' : '0px', // Width of Sidebar
                   transition: theme.transitions.create(['margin'], {

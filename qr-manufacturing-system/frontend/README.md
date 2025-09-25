@@ -51,3 +51,21 @@ In your Vercel project, set:
 - Item Scanning
 - Inventory Management
 - Engraving Simulation
+
+## Analytics (Real Data)
+
+- The Analytics page now sources real data from the backend endpoints:
+	- `GET /inventory/stats`
+	- `GET /items/manufactured?limit=...`
+	- `GET /stats`
+- Code lives under `src/features/analytics/` with an industry-standard feature structure:
+	- `AnalyticsPage.tsx` – page UI
+	- `api.ts` – fetchers
+	- `types.ts` – TypeScript types
+	- `utils.ts` – data transforms for charts
+- Existing route `src/pages/Analytics.tsx` re-exports the new feature page to preserve routing.
+
+### Config
+
+- Backend API base is read from `REACT_APP_API_BASE` or `REACT_APP_API_URL`.
+	- If `REACT_APP_API_URL` ends with `/api`, it will be normalized automatically.

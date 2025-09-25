@@ -1,4 +1,5 @@
 import React from 'react';
+import styles from '../../styles/components/Sidebar.module.css';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Drawer,
@@ -46,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open }) => {
 
   return (
     <Drawer
+      className={styles.root}
       variant="persistent"
       anchor="left"
       open={open}
@@ -55,8 +57,9 @@ const Sidebar: React.FC<SidebarProps> = ({ open }) => {
         '& .MuiDrawer-paper': {
           width: 240,
           boxSizing: 'border-box',
-          backgroundColor: '#1e293b',
-          color: '#fff',
+          backgroundColor: '#ffffff',
+          color: 'rgba(17,24,39,0.9)',
+          borderRight: '1px solid rgba(16,24,40,0.08)',
         },
       }}
     >
@@ -69,26 +72,36 @@ const Sidebar: React.FC<SidebarProps> = ({ open }) => {
                 selected={location.pathname === item.path}
                 onClick={() => handleItemClick(item.path)}
                 sx={{
+                  borderRadius: 1,
+                  alignItems: 'center',
                   '&.Mui-selected': {
-                    backgroundColor: '#334155',
-                    '&:hover': {
-                      backgroundColor: '#475569',
+                    backgroundColor: 'rgba(37, 99, 235, 0.06)',
+                    color: 'primary.main',
+                    '& .MuiListItemIcon-root': { color: 'primary.main' },
+                    '&:before': {
+                      content: '""',
+                      position: 'absolute',
+                      left: 0,
+                      top: 8,
+                      bottom: 8,
+                      width: '3px',
+                      borderRadius: '0 3px 3px 0',
+                      backgroundColor: 'primary.main',
                     },
+                    '&:hover': { backgroundColor: 'rgba(37, 99, 235, 0.1)' },
                   },
-                  '&:hover': {
-                    backgroundColor: '#334155',
-                  },
+                  '&:hover': { backgroundColor: 'rgba(16,24,40,0.04)' },
                 }}
               >
-                <ListItemIcon sx={{ color: '#fff' }}>
+                <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
                   {item.icon}
                 </ListItemIcon>
-                <ListItemText primary={item.text} />
+                <ListItemText primaryTypographyProps={{ sx: { fontWeight: 500, letterSpacing: '0.15px' } }} primary={item.text} />
               </ListItemButton>
             </ListItem>
           ))}
         </List>
-        <Divider sx={{ backgroundColor: '#475569' }} />
+        <Divider sx={{ borderColor: 'rgba(16,24,40,0.08)' }} />
       </Box>
     </Drawer>
   );

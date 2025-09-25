@@ -1,0 +1,45 @@
+/* Styles for the Dashboard page */
+.root { padding: 32px; background: var(--mui-palette-background-default, #f7f9fc); }
+
+/* Center the page content within a comfortable max width */
+.container {
+	max-width: 1200px;
+	margin: 0 auto;
+}
+
+/* Even, roomy spacing for KPI cards and chart papers */
+.section { margin-bottom: 24px; }
+
+.card {
+	border-radius: 16px;
+	/* softer, consistent elevation */
+	box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06), 0 1px 1px rgba(16, 24, 40, 0.04);
+	height: 100%;
+}
+
+.cardContent {
+	padding: 20px 24px !important; /* give content more breathing room */
+}
+
+.paper {
+	padding: 24px;
+	border-radius: 16px;
+	box-shadow: 0 1px 4px rgba(16, 24, 40, 0.05), 0 1px 1px rgba(16, 24, 40, 0.03);
+}
+
+/* Mobile tweaks */
+@media (max-width: 600px) {
+	.root { padding: 16px; }
+	.cardContent { padding: 16px !important; }
+	.paper { padding: 16px; }
+	.section { margin-bottom: 16px; }
+	/* Respect device safe areas (iOS notch etc.) */
+	@supports (padding: max(0px)) {
+		.root {
+			padding-top: max(16px, env(safe-area-inset-top));
+			padding-right: max(16px, env(safe-area-inset-right));
+			padding-bottom: max(16px, env(safe-area-inset-bottom));
+			padding-left: max(16px, env(safe-area-inset-left));
+		}
+	}
+}

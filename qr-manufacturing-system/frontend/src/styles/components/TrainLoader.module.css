@@ -1,0 +1,51 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.track {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  height: 8px;
+  background: linear-gradient(90deg, #e6e6e6 25%, #f5f5f5 25%, #f5f5f5 50%, #e6e6e6 50%, #e6e6e6 75%, #f5f5f5 75%, #f5f5f5 100%);
+  background-size: 32px 8px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.train {
+  position: absolute;
+  left: -64px;
+  top: -10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: move 1.6s linear infinite;
+}
+
+.engine,
+.car {
+  width: 24px;
+  height: 16px;
+  border-radius: 4px;
+  background: #0b5fff;
+  box-shadow: 0 2px 6px rgba(11, 95, 255, 0.35);
+}
+
+.engine {
+  width: 28px;
+}
+
+.caption {
+  font-size: 0.9rem;
+  color: #6e6e73;
+}
+
+@keyframes move {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(calc(100% + 64px)); }
+}

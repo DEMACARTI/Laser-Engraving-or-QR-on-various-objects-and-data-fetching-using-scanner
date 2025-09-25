@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import styles from '../styles/pages/Settings.module.css';
 import {
   Box,
   Typography,
@@ -99,12 +100,12 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <Box>
+    <Box className={styles.root}>
       <Typography variant="h4" gutterBottom>
         System Settings
       </Typography>
 
-      <Paper sx={{ width: '100%' }}>
+  <Paper className={styles.paper} sx={{ width: '100%' }}>
         <Tabs
           value={tabValue}
           onChange={handleTabChange}

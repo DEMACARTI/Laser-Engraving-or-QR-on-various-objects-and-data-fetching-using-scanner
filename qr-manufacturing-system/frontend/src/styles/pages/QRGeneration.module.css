@@ -1,0 +1,47 @@
+/* Styles for the QRGeneration page */
+.root {
+  min-height: 100vh;
+  background: var(--mui-palette-background-default, #f7f9fc);
+  padding: 32px 16px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.sectionTitle {
+  font-weight: 600;
+  background: linear-gradient(135deg, #1976d2, #115293);
+  background-clip: text; /* standard property for compatibility */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 24px;
+}
+
+.paper {
+  padding: 24px; /* Keep existing padding */
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.05), 0 1px 1px rgba(16, 24, 40, 0.03);
+  border: 1px solid rgba(16, 24, 40, 0.06);
+}
+
+.section { margin-bottom: 24px; }
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.resultsEmpty {
+  text-align: center;
+  padding: 48px 0;
+  color: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.02);
+  border-radius: 8px;
+}

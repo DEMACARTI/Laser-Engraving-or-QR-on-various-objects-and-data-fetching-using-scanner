@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import styles from '../styles/pages/Inventory.module.css';
 import {
   Box,
   Typography,
@@ -140,7 +141,7 @@ const Inventory: React.FC = () => {
   }, []);
 
   return (
-    <Box sx={{ flexGrow: 1, p: 3 }}>
+    <Box className={styles.root}>
       <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <InventoryIcon />
         Inventory Management
@@ -153,9 +154,9 @@ const Inventory: React.FC = () => {
       )}
 
       {/* Stats */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={3} className={styles.section}>
         <Grid item xs={12} sm={6} md={4}>
-          <Card>
+          <Card className={styles.paper}>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
                 Total Items
@@ -167,7 +168,7 @@ const Inventory: React.FC = () => {
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
-          <Card>
+          <Card className={styles.paper}>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
                 Filtered Items
@@ -179,7 +180,7 @@ const Inventory: React.FC = () => {
           </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
-          <Card>
+          <Card className={styles.paper}>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
                 Status
@@ -193,7 +194,7 @@ const Inventory: React.FC = () => {
       </Grid>
 
       {/* Search */}
-      <Paper sx={{ p: 2, mb: 2 }}>
+      <Paper className={styles.paper} sx={{ mb: 2 }}>
         <TextField
           fullWidth
           label="Search by UID, Component, or Vendor"
@@ -206,7 +207,7 @@ const Inventory: React.FC = () => {
       </Paper>
 
       {/* Data Grid */}
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper className={styles.paper} sx={{ height: 600, width: '100%' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
             <CircularProgress />

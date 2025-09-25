@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import styles from '../styles/pages/Scanning.module.css';
 import {
   Box,
   Paper,
@@ -387,15 +388,15 @@ const Scanning = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box className={styles.root}>
       <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
         🔍 QR Code Scanner
       </Typography>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} className={styles.section}>
         {/* Scanner Section */}
         <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3, height: 'fit-content' }}>
+          <Paper className={styles.paper} sx={{ height: 'fit-content' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
               <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <QrCodeScanner color="primary" />
@@ -560,7 +561,7 @@ const Scanning = () => {
           {/* Scan Results */}
           {scanResult && (
             <Fade in={true}>
-              <Paper sx={{ p: 3, mt: 3 }}>
+              <Paper className={styles.paper} sx={{ mt: 3 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                   <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CheckCircle color="success" />
@@ -678,7 +679,7 @@ const Scanning = () => {
 
         {/* Scan History */}
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, height: 'fit-content' }}>
+          <Paper className={styles.paper} sx={{ height: 'fit-content' }}>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <InfoIcon color="primary" />
               Recent Scans ({scanHistory.length})

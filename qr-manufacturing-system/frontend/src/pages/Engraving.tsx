@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import styles from '../styles/pages/Engraving.module.css';
 import {
   Box,
   Typography,
@@ -31,6 +32,7 @@ import {
   Stop as StopIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
+import TrainLoader from '../components/Loaders/TrainLoader';
 
 interface EngravingQR {
   uid: string;
@@ -235,15 +237,15 @@ const Engraving: React.FC = () => {
   const progressPercentage = numQRsToEngrave > 0 ? (completedCount / numQRsToEngrave) * 100 : 0;
 
   return (
-    <Box>
+    <Box className={styles.root}>
       <Typography variant="h4" gutterBottom>
         Laser Engraving System
       </Typography>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} className={styles.section}>
         {/* Control Panel */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Engraving Controls
             </Typography>
@@ -286,11 +288,14 @@ const Engraving: React.FC = () => {
                 <Typography variant="body2">
                   Progress: {completedCount} / {numQRsToEngrave} QR codes engraved
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={progressPercentage} 
-                  sx={{ mt: 1, mb: 1 }}
-                />
+                <Box sx={{ mt: 1, mb: 1 }}>
+                  <Box sx={{ display: 'none' }}>
+                    <LinearProgress variant="determinate" value={progressPercentage} />
+                  </Box>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <TrainLoader label={`Engraving… ${Math.round(progressPercentage)}%`} />
+                  </div>
+                </Box>
                 <Typography variant="body2">
                   Elapsed Time: {formatTime(elapsedTime)}
                 </Typography>
@@ -357,7 +362,7 @@ const Engraving: React.FC = () => {
 
         {/* QR Codes List */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Available QR Codes ({generatedQRs.length})
             </Typography>
@@ -393,7 +398,7 @@ const Engraving: React.FC = () => {
 
         {/* Machine Status */}
         <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Machine Status
             </Typography>

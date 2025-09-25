@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import styles from '../styles/pages/QRGeneration.module.css';
 import {
   Box,
   Typography,
@@ -33,6 +34,7 @@ import {
   Visibility as VisibilityIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
+import TrainLoader from '../components/Loaders/TrainLoader';
 
 interface QRResult {
   uid: string;
@@ -193,15 +195,16 @@ const QRGeneration: React.FC = () => {
   };
 
   return (
-    <Box>
+    <Box className={styles.root}>
+      <div className={styles.container}>
       <Typography variant="h4" gutterBottom>
         QR Code Generation
       </Typography>
 
-      <Grid container spacing={3}>
+  <Grid container spacing={3} className={styles.section}>
         {/* Generation Form */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Component Details
             </Typography>
@@ -309,10 +312,15 @@ const QRGeneration: React.FC = () => {
               
             {loading && (
               <Box sx={{ mt: 2 }}>
-                <LinearProgress variant="determinate" value={progress} />
-                <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1 }}>
-                  {progress}% Complete
-                </Typography>
+                {/* Keep LinearProgress hidden for accessibility value semantics */}
+                <Box sx={{ display: 'none' }}>
+                  <LinearProgress variant="determinate" value={progress} />
+                </Box>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  {/* Train Loader animation */}
+                  {/* Prefer normal import, but here we inline-require to avoid top-level import reordering */}
+                  {require('../components/Loaders/TrainLoader').default({ label: `Generating… ${progress}%` })}
+                </div>
               </Box>
             )}
           </Paper>
@@ -320,7 +328,7 @@ const QRGeneration: React.FC = () => {
 
         {/* Results */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
+          <Paper className={styles.paper}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6">
                 Generated QR Codes ({results.length})
@@ -412,6 +420,7 @@ const QRGeneration: React.FC = () => {
           )}
         </Grid>
       )}
+      </div>
     </Box>
   );
 };

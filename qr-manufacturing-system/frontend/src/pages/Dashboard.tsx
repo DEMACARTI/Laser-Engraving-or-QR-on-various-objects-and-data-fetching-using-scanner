@@ -1,4 +1,5 @@
 import React from 'react';
+import styles from '../styles/pages/Dashboard.module.css';
 import {
   Grid,
   Paper,
@@ -7,6 +8,8 @@ import {
   Card,
   CardContent,
   LinearProgress,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import {
   BarChart,
@@ -22,6 +25,7 @@ import {
   LineChart,
   Line,
 } from 'recharts';
+// Removed TrainLoader for Success Rate; using standard percentage display instead
 
 // Mock data for charts
 const productionData = [
@@ -41,17 +45,25 @@ const statusData = [
 ];
 
 const Dashboard: React.FC = () => {
+  const theme = useTheme();
+  const isSm = useMediaQuery(theme.breakpoints.down('sm'));
+  const gridSpacing = isSm ? 2 : 3;
+  const barHeight = isSm ? 220 : 300;
+  const lineHeight = isSm ? 200 : 250;
+  const pieOuterRadius = isSm ? 60 : 80;
+
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>
-        Dashboard
-      </Typography>
+    <Box className={styles.root}>
+      <div className={styles.container}>
+        <Typography variant="h4" gutterBottom>
+          Dashboard
+        </Typography>
       
       {/* Key Metrics */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={gridSpacing} className={styles.section}>
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+          <Card className={styles.card}>
+            <CardContent className={styles.cardContent}>
               <Typography variant="h6" color="textSecondary" gutterBottom>
                 Total QR Codes
               </Typography>
@@ -66,8 +78,8 @@ const Dashboard: React.FC = () => {
         </Grid>
         
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+          <Card className={styles.card}>
+            <CardContent className={styles.cardContent}>
               <Typography variant="h6" color="textSecondary" gutterBottom>
                 Active Jobs
               </Typography>
@@ -82,27 +94,34 @@ const Dashboard: React.FC = () => {
         </Grid>
         
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+          <Card className={styles.card}>
+            <CardContent className={styles.cardContent}>
               <Typography variant="h6" color="textSecondary" gutterBottom>
                 Success Rate
               </Typography>
               <Typography variant="h4" color="success.main">
                 97.3%
               </Typography>
-              <LinearProgress 
-                variant="determinate" 
-                value={97.3} 
-                color="success"
-                sx={{ mt: 1 }}
-              />
+              <Box sx={{ mt: 1 }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={97.3}
+                  color="success"
+                  sx={{ height: 8, borderRadius: 5 }}
+                  aria-label="Success rate 97.3 percent"
+                />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                  <Typography variant="caption" color="textSecondary">0%</Typography>
+                  <Typography variant="caption" color="textSecondary">100%</Typography>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
         
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+          <Card className={styles.card}>
+            <CardContent className={styles.cardContent}>
               <Typography variant="h6" color="textSecondary" gutterBottom>
                 System Health
               </Typography>
@@ -117,14 +136,14 @@ const Dashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Charts */}
-      <Grid container spacing={3}>
+  {/* Charts */}
+  <Grid container spacing={gridSpacing}>
         <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 2 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Weekly Production Overview
             </Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={barHeight}>
               <BarChart data={productionData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
@@ -139,17 +158,17 @@ const Dashboard: React.FC = () => {
         </Grid>
         
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 2 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Job Status Distribution
             </Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={barHeight}>
               <PieChart>
                 <Pie
                   data={statusData}
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
+                  outerRadius={pieOuterRadius}
                   dataKey="value"
                   label={({ name, value }) => `${name}: ${value}%`}
                 >
@@ -164,11 +183,11 @@ const Dashboard: React.FC = () => {
         </Grid>
         
         <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
+          <Paper className={styles.paper}>
             <Typography variant="h6" gutterBottom>
               Production Trend (Last 7 Days)
             </Typography>
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={lineHeight}>
               <LineChart data={productionData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
@@ -200,6 +219,7 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+      </div>
     </Box>
   );
 };
