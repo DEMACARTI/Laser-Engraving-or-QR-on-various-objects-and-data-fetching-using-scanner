@@ -75,5 +75,5 @@
     "eslint-plugin-prettier": "^4.2.1",
     "prettier": "^2.8.7"
   },
-  "proxy": "http://localhost:5002"
+  "proxy": "https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com"
 }

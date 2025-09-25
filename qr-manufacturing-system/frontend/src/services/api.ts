@@ -26,7 +26,7 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // Remove any localhost:5002 references
     if (config.url?.includes('localhost:5002')) {
-      config.url = config.url.replace('http://localhost:5002', '');
+      config.url = config.url.replace('http://https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com:5002', '');
     }
     console.log(`Making ${config.method?.toUpperCase()} request to: ${config.baseURL}${config.url}`);
     return config;

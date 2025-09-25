@@ -189,7 +189,7 @@ const Scanning = () => {
       console.log(`🔍 Attempting to scan UID: ${uid.trim()}`);
       
       // Connect to the backend scanning service (same database as QR generation)
-      const response = await fetch('http://localhost:5002/scan', {
+      const response = await fetch('https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/scan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
