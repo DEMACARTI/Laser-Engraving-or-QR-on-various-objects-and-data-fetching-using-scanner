@@ -30,6 +30,15 @@
   margin-bottom: 24px;
 }
 
+/* Page title gradient (consistent with other pages) */
+.title {
+  font-weight: 600;
+  background: linear-gradient(135deg, #1976d2, #115293);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .paper {
   padding: 24px; /* Keep existing padding */
   border-radius: 16px;
@@ -68,4 +77,5 @@
   .root { padding: 16px; }
   .paper { padding: 16px; }
   .section { margin-bottom: 16px; }
+  .actions { flex-direction: column; }
 }
