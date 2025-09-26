@@ -212,8 +212,10 @@ const QRGeneration: React.FC = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Component Type</InputLabel>
+                  <InputLabel id="component-type-label">Component Type</InputLabel>
                   <Select
+                    labelId="component-type-label"
+                    label="Component Type"
                     value={formData.component}
                     onChange={(e) => handleInputChange('component', e.target.value)}
                   >
@@ -226,8 +228,10 @@ const QRGeneration: React.FC = () => {
               
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Vendor</InputLabel>
+                  <InputLabel id="vendor-label">Vendor</InputLabel>
                   <Select
+                    labelId="vendor-label"
+                    label="Vendor"
                     value={formData.vendor}
                     onChange={(e) => handleInputChange('vendor', e.target.value)}
                   >
@@ -240,8 +244,10 @@ const QRGeneration: React.FC = () => {
               
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Lot Number</InputLabel>
+                  <InputLabel id="lot-label">Lot Number</InputLabel>
                   <Select
+                    labelId="lot-label"
+                    label="Lot Number"
                     value={formData.lot}
                     onChange={(e) => handleInputChange('lot', e.target.value)}
                   >

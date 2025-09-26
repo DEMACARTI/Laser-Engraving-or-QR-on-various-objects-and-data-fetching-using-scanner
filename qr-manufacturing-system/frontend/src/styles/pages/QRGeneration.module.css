@@ -38,6 +38,15 @@
   border: 1px solid rgba(16, 24, 40, 0.06);
 }
 
+/* Keep the floating label above the open menu and avoid overlap */
+.paper :global(.MuiInputLabel-root) {
+  z-index: 1;
+}
+.paper :global(.Mui-focused) .MuiInputLabel-root,
+.paper :global(.MuiInputLabel-root.MuiInputLabel-shrink) {
+  z-index: 2;
+}
+
 .section { margin-bottom: 24px; }
 
 .actions {
