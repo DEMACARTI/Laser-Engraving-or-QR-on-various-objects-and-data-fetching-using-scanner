@@ -28,6 +28,7 @@ import {
   ListItemText,
   ListItemSecondaryAction,
 } from '@mui/material';
+import { FormHelperText } from '@mui/material';
 import {
   QrCode as QrCodeIcon,
   Download as DownloadIcon,
@@ -56,6 +57,8 @@ const QRGeneration: React.FC = () => {
     count: 1,
     mfg_date: new Date().toISOString().split('T')[0]
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [options, setOptions] = useState<QROptions>({ 
     components: [], 
     vendors: [], 
@@ -95,11 +98,71 @@ const QRGeneration: React.FC = () => {
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setError('');
+    // Live-validate the field after first submit attempt
+    if (submitAttempted) {
+      const msg = validateField(field, value);
+      setFormErrors(prev => ({ ...prev, [field]: msg }));
+    }
+  };
+
+  const validateField = (field: string, value: any): string => {
+    switch (field) {
+      case 'component':
+        return value ? '' : 'Component is required';
+      case 'vendor':
+        return value ? '' : 'Vendor is required';
+      case 'lot':
+        return value ? '' : 'Lot number is required';
+      case 'warranty_years': {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 'Enter a valid number';
+        if (n < 1) return 'Must be at least 1 year';
+        if (n > 20) return 'Must not exceed 20 years';
+        return '';
+      }
+      case 'count': {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 'Enter a valid quantity';
+        if (n < 1) return 'Minimum 1';
+        if (n > 1000) return 'Maximum 1000';
+        return '';
+      }
+      case 'mfg_date': {
+        if (!value) return 'Manufacturing date is required';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return 'Enter a valid date';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d > today) return 'Cannot be in the future';
+        return '';
+      }
+      default:
+        return '';
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const fields: Array<[string, any]> = [
+      ['component', formData.component],
+      ['vendor', formData.vendor],
+      ['lot', formData.lot],
+      ['warranty_years', formData.warranty_years],
+      ['count', formData.count],
+      ['mfg_date', formData.mfg_date],
+    ];
+    const errors: Record<string, string> = {};
+    for (const [k, v] of fields) {
+      const msg = validateField(k, v);
+      if (msg) errors[k] = msg;
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const generateQRCodes = async () => {
-    if (!formData.component || !formData.vendor || !formData.lot) {
-      setError('Please fill in all required fields');
+    setSubmitAttempted(true);
+    if (!validateForm()) {
+      setError('Please correct the highlighted fields');
       return;
     }
 
@@ -211,7 +274,7 @@ const QRGeneration: React.FC = () => {
             
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required error={Boolean(formErrors.component)}>
                   <InputLabel id="component-type-label">Component Type</InputLabel>
                   <Select
                     labelId="component-type-label"
@@ -223,11 +286,14 @@ const QRGeneration: React.FC = () => {
                       <MenuItem key={comp} value={comp}>{comp}</MenuItem>
                     ))}
                   </Select>
+                  {formErrors.component && (
+                    <FormHelperText>{formErrors.component}</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required error={Boolean(formErrors.vendor)}>
                   <InputLabel id="vendor-label">Vendor</InputLabel>
                   <Select
                     labelId="vendor-label"
@@ -239,11 +305,14 @@ const QRGeneration: React.FC = () => {
                       <MenuItem key={vendor} value={vendor}>{vendor}</MenuItem>
                     ))}
                   </Select>
+                  {formErrors.vendor && (
+                    <FormHelperText>{formErrors.vendor}</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required error={Boolean(formErrors.lot)}>
                   <InputLabel id="lot-label">Lot Number</InputLabel>
                   <Select
                     labelId="lot-label"
@@ -255,6 +324,9 @@ const QRGeneration: React.FC = () => {
                       <MenuItem key={lot} value={lot}>{lot}</MenuItem>
                     ))}
                   </Select>
+                  {formErrors.lot && (
+                    <FormHelperText>{formErrors.lot}</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               
@@ -266,6 +338,9 @@ const QRGeneration: React.FC = () => {
                   value={formData.warranty_years}
                   onChange={(e) => handleInputChange('warranty_years', parseInt(e.target.value))}
                   inputProps={{ min: 1, max: 20 }}
+                  required
+                  error={Boolean(formErrors.warranty_years)}
+                  helperText={formErrors.warranty_years || '1 - 20 years'}
                 />
               </Grid>
               
@@ -277,6 +352,9 @@ const QRGeneration: React.FC = () => {
                   value={formData.count}
                   onChange={(e) => handleInputChange('count', parseInt(e.target.value))}
                   inputProps={{ min: 1, max: 1000 }}
+                  required
+                  error={Boolean(formErrors.count)}
+                  helperText={formErrors.count || '1 - 1000 items'}
                 />
               </Grid>
               
@@ -288,6 +366,9 @@ const QRGeneration: React.FC = () => {
                   value={formData.mfg_date}
                   onChange={(e) => handleInputChange('mfg_date', e.target.value)}
                   InputLabelProps={{ shrink: true }}
+                  required
+                  error={Boolean(formErrors.mfg_date)}
+                  helperText={formErrors.mfg_date || 'Cannot be in the future'}
                 />
               </Grid>
             </Grid>
