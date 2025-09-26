@@ -25,10 +25,8 @@ import {
   Divider
 } from '@mui/material';
 import {
-  CameraAlt,
   QrCodeScanner,
   CheckCircle,
-  Error as ErrorIcon,
   Info as InfoIcon,
   Clear as ClearIcon,
   StopCircle,
@@ -69,12 +67,28 @@ const Scanning = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
-  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Stop camera utility (declared early to be used in effects)
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore - assigning null is valid for HTMLVideoElement.srcObject
+      videoRef.current.srcObject = null;
+    }
+    if (readerRef.current) {
+      readerRef.current.reset();
+    }
+    setIsCameraActive(false);
+  }, []);
 
   // Initialize ZXing reader
   useEffect(() => {
@@ -85,7 +99,6 @@ const Scanning = () => {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        setAvailableDevices(videoDevices);
         if (videoDevices.length > 0) {
           setSelectedDeviceId(videoDevices[0].deviceId);
         }
@@ -102,7 +115,7 @@ const Scanning = () => {
       }
       stopCamera();
     };
-  }, []);
+  }, [stopCamera]);
 
   // Focus input on mount for barcode scanner
   useEffect(() => {
@@ -111,72 +124,17 @@ const Scanning = () => {
     }
   }, [cameraMode]);
 
-  const startCamera = useCallback(async () => {
-    if (!readerRef.current || !videoRef.current) return;
+  
 
-    try {
-      setIsCameraActive(true);
-      setError('');
-
-      // Stop any existing stream
-      stopCamera();
-
-      const constraints = {
-        video: {
-          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-          facingMode: selectedDeviceId ? undefined : { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-      videoRef.current.srcObject = stream;
-
-      // Start scanning
-      readerRef.current.decodeFromVideoDevice(
-        selectedDeviceId || null,
-        videoRef.current,
-        (result, error) => {
-          if (result) {
-            const scannedText = result.getText();
-            console.log('📷 QR Code scanned:', scannedText);
-            handleScan(scannedText);
-            // Stop camera after successful scan
-            setTimeout(() => {
-              stopCamera();
-              setCameraMode(false);
-            }, 1000);
-          }
-          if (error && !(error instanceof NotFoundException)) {
-            console.warn('Scan error:', error);
-          }
-        }
-      );
-
-    } catch (err: any) {
-      console.error('Camera error:', err);
-      setError(`Camera error: ${err.message}`);
-      setIsCameraActive(false);
-    }
-  }, [selectedDeviceId]);
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    if (readerRef.current) {
-      readerRef.current.reset();
-    }
-    setIsCameraActive(false);
+  const addToHistory = useCallback((uid: string, result: ScanResult) => {
+    const historyItem: ScanHistoryItem = {
+      ...result,
+      scannedAt: new Date().toISOString()
+    };
+    setScanHistory(prev => [historyItem, ...prev.slice(0, 9)]); // Keep last 10 scans
   }, []);
 
-  const handleScan = async (uid: string) => {
+  const handleScan = useCallback(async (uid: string) => {
     if (!uid.trim()) {
       setError('Please enter a valid UID');
       return;
@@ -239,7 +197,60 @@ const Scanning = () => {
     if (!cameraMode && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  };
+  }, [cameraMode, addToHistory]);
+
+  const startCamera = useCallback(async () => {
+    if (!readerRef.current || !videoRef.current) return;
+
+    try {
+      setIsCameraActive(true);
+      setError('');
+
+      // Stop any existing stream
+      stopCamera();
+
+      const constraints = {
+        video: {
+          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+          facingMode: selectedDeviceId ? undefined : { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      } as MediaStreamConstraints;
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore - assigning MediaStream is supported at runtime
+      videoRef.current.srcObject = stream;
+
+      // Start scanning
+      readerRef.current.decodeFromVideoDevice(
+        selectedDeviceId || null,
+        videoRef.current,
+        (result, error) => {
+          if (result) {
+            const scannedText = result.getText();
+            console.log('📷 QR Code scanned:', scannedText);
+            handleScan(scannedText);
+            // Stop camera after successful scan
+            setTimeout(() => {
+              stopCamera();
+              setCameraMode(false);
+            }, 1000);
+          }
+          if (error && !(error instanceof NotFoundException)) {
+            console.warn('Scan error:', error);
+          }
+        }
+      );
+
+    } catch (err: any) {
+      console.error('Camera error:', err);
+      setError(`Camera error: ${err.message}`);
+      setIsCameraActive(false);
+    }
+  }, [selectedDeviceId, stopCamera, handleScan]);
 
   // Mock database matching the QR generation service
   const simulateScanAPI = async (uid: string): Promise<ScanResult> => {
@@ -338,17 +349,8 @@ const Scanning = () => {
     };
   };
 
-  const addToHistory = (uid: string, result: ScanResult) => {
-    const historyItem: ScanHistoryItem = {
-      ...result,
-      scannedAt: new Date().toISOString()
-    };
-    
-    setScanHistory(prev => [historyItem, ...prev.slice(0, 9)]); // Keep last 10 scans
-  };
-
   const handleManualScan = () => {
-    handleScan(scannedUID);
+    handleScan(scannedUID.trim());
   };
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
@@ -515,29 +517,36 @@ const Scanning = () => {
                   Enter UID manually or use a barcode scanner gun
                 </Typography>
                 
-                <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'flex-end' }}>
-                  <TextField
-                    ref={inputRef}
-                    label="Enter UID"
-                    variant="outlined"
-                    value={scannedUID}
-                    onChange={(e) => setScannedUID(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    fullWidth
-                    placeholder="e.g., PAD-V010-L2025-09-00001"
-                    disabled={loading}
-                    helperText="Press Enter to scan or use barcode scanner gun"
-                  />
-                  
-                  <Button
-                    variant="contained"
-                    onClick={handleManualScan}
-                    disabled={loading || !scannedUID.trim()}
-                    sx={{ minWidth: 120 }}
-                  >
-                    {loading ? <CircularProgress size={24} /> : 'Scan'}
-                  </Button>
-                </Box>
+                <Grid container spacing={2} alignItems="stretch" sx={{ mb: 2 }}>
+                  <Grid item xs={12} md={9}>
+                    <TextField
+                      inputRef={inputRef}
+                      label="Enter UID"
+                      variant="outlined"
+                      value={scannedUID}
+                      onChange={(e) => setScannedUID(e.target.value)}
+                      onKeyDown={handleKeyPress}
+                      fullWidth
+                      placeholder="e.g., PAD-V010-L2025-09-00001"
+                      disabled={loading}
+                      helperText="Press Enter to scan or use barcode scanner gun"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3} sx={{ display: 'flex', alignItems: 'stretch' }}>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleManualScan}
+                      disabled={loading || !scannedUID.trim()}
+                      sx={{
+                        height: { md: 56 },
+                        minHeight: { md: 56 },
+                      }}
+                    >
+                      {loading ? <CircularProgress size={24} /> : 'Scan'}
+                    </Button>
+                  </Grid>
+                </Grid>
 
                 <Button
                   variant="outlined"
@@ -737,7 +746,7 @@ const Scanning = () => {
             variant="outlined"
             value={manualCode}
             onChange={(e) => setManualCode(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleDialogScan()}
+            onKeyDown={(e) => e.key === 'Enter' && handleDialogScan()}
             placeholder="e.g., PAD-V010-L2025-09-00001"
             helperText="Enter the complete UID to scan"
           />

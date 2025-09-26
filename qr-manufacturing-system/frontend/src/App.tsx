@@ -15,6 +15,7 @@ import Engraving from './pages/Engraving';
 import Scanning from './pages/Scanning';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import ClickSpark from './components/Effects/ClickSpark';
 
 // Create theme
 const theme = createTheme({
@@ -125,7 +126,9 @@ const App: React.FC = () => {
                   minHeight: 'calc(100vh - 64px)',
                 }}
               >
-                <Routes>
+                {/* Global click spark effect - wraps all page content */}
+                <ClickSpark sparkColor="#fff" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                  <Routes>
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/qr-generation" element={<QRGeneration />} />
@@ -134,7 +137,8 @@ const App: React.FC = () => {
                   <Route path="/scanning" element={<Scanning />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/settings" element={<Settings />} />
-                </Routes>
+                  </Routes>
+                </ClickSpark>
               </Box>
             </Box>
           </Router>

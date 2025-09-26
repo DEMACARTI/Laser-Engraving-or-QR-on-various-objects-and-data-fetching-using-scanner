@@ -1,0 +1,37 @@
+.container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2000; /* Above MUI modals (default 1300-1500) */
+}
+
+.spark {
+  --dx: 0px;
+  --dy: 0px;
+  --dur: 700ms;
+  --delay: 0ms;
+
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  opacity: 0;
+  animation: spark-move var(--dur) cubic-bezier(0.2, 0.6, 0.2, 1) var(--delay) forwards,
+             spark-fade var(--dur) ease-out var(--delay) forwards;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset,
+              0 0 8px rgba(0,0,0,0.06);
+}
+
+@keyframes spark-move {
+  0% { transform: translate(-50%, -50%) translate(0, 0) scale(1); }
+  100% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.6); }
+}
+
+@keyframes spark-fade {
+  0% { opacity: 1; }
+  80% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark { animation: none; opacity: 0; }
+}

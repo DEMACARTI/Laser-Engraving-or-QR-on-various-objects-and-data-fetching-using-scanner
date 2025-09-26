@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import styles from '../../styles/pages/Analytics.module.css';
-import { Box, Typography, Grid, Paper, Card, CardContent, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem, TextField, useMediaQuery, useTheme } from '@mui/material';
+import { Box, Typography, Grid, Paper, Card, CardContent, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem, useMediaQuery, useTheme } from '@mui/material';
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, LineChart, Line } from 'recharts';
 import { fetchInventoryStats, fetchManufacturedItems, fetchServiceStats } from './api';
 import { statusBreakdownToPieData, computeMonthlyCounts } from './utils';
@@ -22,7 +22,7 @@ const AnalyticsPage: React.FC = () => {
   const error = invQuery.error || svcQuery.error || mfgQuery.error;
   const inventoryStats = invQuery.data?.stats;
   const serviceStats = svcQuery.data;
-  const manufactured = mfgQuery.data || [];
+  const manufactured = useMemo(() => mfgQuery.data ?? [], [mfgQuery.data]);
 
   const monthlyData = useMemo(() => computeMonthlyCounts(manufactured), [manufactured]);
   const materialUsage = useMemo(() => statusBreakdownToPieData(inventoryStats?.status_breakdown || {}), [inventoryStats]);

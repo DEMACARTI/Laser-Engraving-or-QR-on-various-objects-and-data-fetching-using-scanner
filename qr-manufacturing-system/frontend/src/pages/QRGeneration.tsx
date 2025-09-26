@@ -7,8 +7,6 @@ import {
   Paper,
   TextField,
   Button,
-  Card,
-  CardContent,
   FormControl,
   InputLabel,
   Select,
@@ -32,10 +30,7 @@ import { FormHelperText } from '@mui/material';
 import {
   QrCode as QrCodeIcon,
   Download as DownloadIcon,
-  Visibility as VisibilityIcon,
-  Delete as DeleteIcon,
 } from '@mui/icons-material';
-import TrainLoader from '../components/Loaders/TrainLoader';
 
 interface QRResult {
   uid: string;
@@ -125,15 +120,6 @@ const QRGeneration: React.FC = () => {
         if (!Number.isFinite(n)) return 'Enter a valid quantity';
         if (n < 1) return 'Minimum 1';
         if (n > 1000) return 'Maximum 1000';
-        return '';
-      }
-      case 'mfg_date': {
-        if (!value) return 'Manufacturing date is required';
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return 'Enter a valid date';
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (d > today) return 'Cannot be in the future';
         return '';
       }
       default:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from '../styles/pages/Engraving.module.css';
 import {
   Box,
@@ -8,10 +8,6 @@ import {
   Button,
   Card,
   CardContent,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   TextField,
   Chip,
   LinearProgress,
@@ -107,7 +103,7 @@ const Engraving: React.FC = () => {
   };
 
   // Simulated engraving process
-  const simulateEngraving = () => {
+  const simulateEngraving = useCallback(() => {
     if (currentEngravingIndex >= numQRsToEngrave || engravingStatus !== 'running') {
       if (currentEngravingIndex >= numQRsToEngrave) {
         setEngravingStatus('idle');
@@ -140,7 +136,7 @@ const Engraving: React.FC = () => {
         }
       }, timeDelay * 1000);
     }
-  };
+  }, [currentEngravingIndex, numQRsToEngrave, engravingStatus, timeDelay, generatedQRs]);
 
   // Effect to handle the engraving simulation
   useEffect(() => {
@@ -159,7 +155,7 @@ const Engraving: React.FC = () => {
         clearInterval(intervalRef.current);
       }
     };
-  }, [engravingStatus, currentEngravingIndex, numQRsToEngrave, timeDelay, generatedQRs]);
+  }, [engravingStatus, timeDelay, simulateEngraving]);
 
   // Timer effect for elapsed time
   useEffect(() => {
