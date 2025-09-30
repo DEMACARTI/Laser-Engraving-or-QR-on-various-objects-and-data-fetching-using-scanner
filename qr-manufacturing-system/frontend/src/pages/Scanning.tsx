@@ -22,16 +22,22 @@ import {
   FormControlLabel,
   CircularProgress,
   Fade,
-  Divider
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent
 } from '@mui/material';
 import {
   QrCodeScanner,
   CheckCircle,
   Info as InfoIcon,
   Clear as ClearIcon,
-  StopCircle,
-  PlayCircle,
-  Refresh
+  Refresh,
+  CameraAlt,
+  Videocam,
+  VideocamOff
 } from '@mui/icons-material';
 import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
 
@@ -67,6 +73,8 @@ const Scanning = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [camerasLoading, setCamerasLoading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -96,26 +104,81 @@ const Scanning = () => {
     
     // Get available camera devices
     const getDevices = async () => {
+      setCamerasLoading(true);
       try {
+        console.log('🔍 Detecting available camera devices...');
+        
+        // Request permissions first to get device labels
+        await navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+          stream.getTracks().forEach(track => track.stop());
+        });
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        setAvailableCameras(videoDevices);
+        
+        console.log(`📷 Found ${videoDevices.length} camera device(s):`, videoDevices.map(d => d.label || 'Unnamed Camera'));
+        
         if (videoDevices.length > 0) {
-          setSelectedDeviceId(videoDevices[0].deviceId);
+          // Prefer back camera (environment) for QR scanning
+          const backCamera = videoDevices.find(device => 
+            device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('environment') ||
+            device.label.toLowerCase().includes('rear')
+          );
+          const selectedDevice = backCamera?.deviceId || videoDevices[0].deviceId;
+          setSelectedDeviceId(selectedDevice);
+          console.log('✅ Default camera selected:', backCamera?.label || videoDevices[0].label || 'First available camera');
+        } else {
+          console.warn('⚠️ No camera devices found');
         }
       } catch (err) {
-        console.error('Error getting camera devices:', err);
+        console.error('❌ Error getting camera devices:', err);
+        // Fallback: still try to enumerate devices without labels
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(device => device.kind === 'videoinput');
+          setAvailableCameras(videoDevices);
+          if (videoDevices.length > 0) {
+            setSelectedDeviceId(videoDevices[0].deviceId);
+            console.log(`📷 Fallback: Found ${videoDevices.length} camera(s) without labels`);
+          }
+        } catch (fallbackErr) {
+          console.error('💥 Failed to enumerate devices:', fallbackErr);
+          setError('Unable to access camera devices. Please check camera permissions.');
+        }
+      } finally {
+        setCamerasLoading(false);
       }
     };
 
     getDevices();
+
+    // Listen for device changes (cameras being connected/disconnected)
+    const handleDeviceChange = () => {
+      console.log('📱 Camera devices changed, refreshing...');
+      // Refresh devices when they change
+      navigator.mediaDevices.enumerateDevices().then(devices => {
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        setAvailableCameras(videoDevices);
+        
+        // If current device is no longer available, select the first one
+        if (!videoDevices.find(d => d.deviceId === selectedDeviceId) && videoDevices.length > 0) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+      });
+    };
+
+    navigator.mediaDevices?.addEventListener('devicechange', handleDeviceChange);
 
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
       }
       stopCamera();
+      navigator.mediaDevices?.removeEventListener('devicechange', handleDeviceChange);
     };
-  }, [stopCamera]);
+  }, [stopCamera, selectedDeviceId]);
 
   // Focus input on mount for barcode scanner
   useEffect(() => {
@@ -123,6 +186,34 @@ const Scanning = () => {
       inputRef.current.focus();
     }
   }, [cameraMode]);
+
+  // Cleanup effect - stop camera when component unmounts or camera mode changes
+  useEffect(() => {
+    return () => {
+      // Cleanup when component unmounts
+      stopCamera();
+    };
+  }, [stopCamera]);
+
+  // Refresh camera devices
+  const refreshCameraDevices = useCallback(async () => {
+    console.log('🔄 Refreshing camera devices...');
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+    setAvailableCameras(videoDevices);
+    
+    // If current device is no longer available, select the first one
+    if (!videoDevices.find(d => d.deviceId === selectedDeviceId) && videoDevices.length > 0) {
+      setSelectedDeviceId(videoDevices[0].deviceId);
+    }
+  }, [selectedDeviceId]);
+
+  // Stop camera when switching away from camera mode
+  useEffect(() => {
+    if (!cameraMode && isCameraActive) {
+      stopCamera();
+    }
+  }, [cameraMode, isCameraActive, stopCamera]);
 
   
 
@@ -198,6 +289,69 @@ const Scanning = () => {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [cameraMode, addToHistory]);
+
+  const handleCameraChange = useCallback((event: SelectChangeEvent<string>) => {
+    const newDeviceId = event.target.value;
+    setSelectedDeviceId(newDeviceId);
+    
+    // If camera is currently active, restart with new device
+    if (isCameraActive) {
+      stopCamera();
+      // Use a slight delay to ensure the camera is fully stopped before restarting
+      setTimeout(() => {
+        // Create a new camera start with the updated device ID
+        if (readerRef.current && videoRef.current) {
+          const startCameraWithDevice = async () => {
+            try {
+              setIsCameraActive(true);
+              setError('');
+
+              const constraints = {
+                video: {
+                  deviceId: newDeviceId ? { exact: newDeviceId } : undefined,
+                  facingMode: newDeviceId ? undefined : { ideal: 'environment' },
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 }
+                }
+              } as MediaStreamConstraints;
+
+              const stream = await navigator.mediaDevices.getUserMedia(constraints);
+              streamRef.current = stream;
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore - assigning MediaStream is supported at runtime
+              videoRef.current!.srcObject = stream;
+
+              // Start scanning
+              readerRef.current!.decodeFromVideoDevice(
+                newDeviceId || null,
+                videoRef.current!,
+                (result, error) => {
+                  if (result) {
+                    const scannedText = result.getText();
+                    console.log('📷 QR Code scanned:', scannedText);
+                    handleScan(scannedText);
+                    // Stop camera after successful scan
+                    setTimeout(() => {
+                      stopCamera();
+                      setCameraMode(false);
+                    }, 1000);
+                  }
+                  if (error && !(error instanceof NotFoundException)) {
+                    console.warn('Scan error:', error);
+                  }
+                }
+              );
+            } catch (err: any) {
+              console.error('Camera error:', err);
+              setError(`Camera error: ${err.message}`);
+              setIsCameraActive(false);
+            }
+          };
+          startCameraWithDevice();
+        }
+      }, 500);
+    }
+  }, [isCameraActive, stopCamera, handleScan, setCameraMode]);
 
   const startCamera = useCallback(async () => {
     if (!readerRef.current || !videoRef.current) return;
@@ -413,19 +567,153 @@ const Scanning = () => {
                     onChange={(e) => {
                       setCameraMode(e.target.checked);
                       if (e.target.checked) {
-                        startCamera();
+                        // Don't auto-start camera, let user choose when to start
+                        // startCamera();
                       } else {
-                        stopCamera();
+                        stopCamera(); // Always stop camera when switching to manual mode
                       }
                     }}
                   />
                 }
-                label="Camera Mode"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {cameraMode ? <Videocam fontSize="small" /> : <QrCodeScanner fontSize="small" />}
+                    {cameraMode ? 'Camera Mode' : 'Manual Mode'}
+                  </Box>
+                }
               />
             </Box>
 
             {cameraMode ? (
               <Box>
+                {/* Camera Device Selection */}
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CameraAlt color="primary" />
+                    Camera Device Selection
+                    <Chip 
+                      label={`${availableCameras.length} device${availableCameras.length !== 1 ? 's' : ''} found`} 
+                      size="small" 
+                      color={availableCameras.length > 0 ? 'success' : 'error'}
+                      variant="outlined"
+                    />
+                  </Typography>
+                  
+                  <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} md={8}>
+                      <FormControl fullWidth disabled={camerasLoading}>
+                        <InputLabel id="camera-select-label">
+                          {camerasLoading ? 'Detecting cameras...' : 'Select Camera Device'}
+                        </InputLabel>
+                        <Select
+                          labelId="camera-select-label"
+                          value={selectedDeviceId}
+                          label={camerasLoading ? 'Detecting cameras...' : 'Select Camera Device'}
+                          onChange={handleCameraChange}
+                          startAdornment={<CameraAlt sx={{ mr: 1, color: 'action.active' }} />}
+                        >
+                          {availableCameras.length === 0 && !camerasLoading ? (
+                            <MenuItem value="" disabled>
+                              🚫 No cameras detected
+                            </MenuItem>
+                          ) : (
+                            availableCameras.map((camera, index) => {
+                              const isBackCamera = camera.label.toLowerCase().includes('back') || 
+                                                 camera.label.toLowerCase().includes('environment') ||
+                                                 camera.label.toLowerCase().includes('rear');
+                              const isFrontCamera = camera.label.toLowerCase().includes('front') || 
+                                                   camera.label.toLowerCase().includes('user') ||
+                                                   camera.label.toLowerCase().includes('facing');
+                              
+                              let displayName = camera.label || `Camera ${index + 1}`;
+                              let icon = '📷';
+                              
+                              if (camera.label) {
+                                if (isBackCamera) {
+                                  displayName = `Back Camera - ${camera.label}`;
+                                  icon = '📱';
+                                } else if (isFrontCamera) {
+                                  displayName = `Front Camera - ${camera.label}`;
+                                  icon = '🤳';
+                                } else {
+                                  displayName = camera.label;
+                                  icon = '📷';
+                                }
+                              } else {
+                                displayName = `Camera ${index + 1}`;
+                                if (isBackCamera) {
+                                  displayName += ' (Back)';
+                                  icon = '📱';
+                                } else if (isFrontCamera) {
+                                  displayName += ' (Front)';
+                                  icon = '🤳';
+                                }
+                              }
+                              
+                              return (
+                                <MenuItem key={camera.deviceId} value={camera.deviceId}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <span>{icon}</span>
+                                    <Box>
+                                      <Typography variant="body2">{displayName}</Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        Device ID: {camera.deviceId.substring(0, 20)}...
+                                      </Typography>
+                                    </Box>
+                                  </Box>
+                                </MenuItem>
+                              );
+                            })
+                          )}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={4}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        startIcon={<Refresh />}
+                        onClick={refreshCameraDevices}
+                        disabled={camerasLoading}
+                        size="large"
+                      >
+                        {camerasLoading ? <CircularProgress size={20} /> : 'Refresh Devices'}
+                      </Button>
+                    </Grid>
+                  </Grid>
+                  
+                  {/* Camera Info and Tips */}
+                  <Box sx={{ mt: 2 }}>
+                    {availableCameras.length === 0 ? (
+                      <Alert severity="error">
+                        ❌ <strong>No cameras detected.</strong> Please check:
+                        <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                          <li>Camera permissions are granted</li>
+                          <li>Camera is not being used by another application</li>
+                          <li>Device has a working camera</li>
+                        </ul>
+                      </Alert>
+                    ) : availableCameras.length === 1 ? (
+                      <Alert severity="info">
+                        📷 <strong>Single camera detected:</strong> {availableCameras[0].label || 'Unnamed Camera'}
+                      </Alert>
+                    ) : (
+                      <Alert severity="success">
+                        🎯 <strong>Multiple cameras available!</strong> Select the back/rear camera for optimal QR code scanning. Front cameras may have difficulty reading QR codes clearly.
+                      </Alert>
+                    )}
+                    
+                    {selectedDeviceId && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Currently selected: {availableCameras.find(c => c.deviceId === selectedDeviceId)?.label || 'Unknown Camera'}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+                
                 {/* Camera Scanner */}
                 <Box sx={{ position: 'relative', mb: 2 }}>
                   <video
@@ -470,22 +758,24 @@ const Scanning = () => {
                   )}
                 </Box>
 
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                   {!isCameraActive ? (
                     <Button
                       variant="contained"
-                      startIcon={<PlayCircle />}
+                      startIcon={<Videocam />}
                       onClick={startCamera}
                       color="success"
+                      size="large"
                     >
                       Start Camera
                     </Button>
                   ) : (
                     <Button
-                      variant="outlined"
-                      startIcon={<StopCircle />}
+                      variant="contained"
+                      startIcon={<VideocamOff />}
                       onClick={stopCamera}
                       color="error"
+                      size="large"
                     >
                       Stop Camera
                     </Button>
@@ -500,13 +790,26 @@ const Scanning = () => {
                     }}
                     disabled={!isCameraActive}
                   >
-                    Restart
+                    Restart Camera
                   </Button>
+                </Box>
+                
+                {/* Resource optimization info */}
+                <Box sx={{ mt: 2 }}>
+                  {isCameraActive ? (
+                    <Alert severity="warning" sx={{ fontSize: '0.875rem' }}>
+                      📷 <strong>Camera Active:</strong> Click "Stop Camera" when done scanning to save device battery and resources.
+                    </Alert>
+                  ) : (
+                    <Alert severity="info" sx={{ fontSize: '0.875rem' }}>
+                      🔋 <strong>Camera Stopped:</strong> Camera resources are optimized. Click "Start Camera" to begin scanning.
+                    </Alert>
+                  )}
                 </Box>
 
                 {isCameraActive && (
-                  <Alert severity="info" sx={{ mt: 2 }}>
-                    Position the QR code within the camera view. The scanner will automatically detect and scan QR codes.
+                  <Alert severity="success" sx={{ mt: 2 }}>
+                    📱 <strong>Ready to Scan:</strong> Position the QR code within the camera view. The scanner will automatically detect and scan QR codes. Camera will stop after successful scan to save resources.
                   </Alert>
                 )}
               </Box>

@@ -13,8 +13,9 @@ lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 # Wait for ports to be freed
 sleep 2
 
-# Navigate to project root
-cd /Users/dakshrathore/Laser-Engraving-or-QR-on-various-objects-and-data-fetching-using-scanner-main
+# Navigate to project root (use current directory)
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$PROJECT_ROOT"
 
 # Start Combined Backend Service (Port 5002)
 echo "🌐 Starting Combined Backend Service on port 5002..."
@@ -31,7 +32,7 @@ PYTHONPATH=. ../../../.venv/bin/python main_updated.py &
 ENGRAVING_PID=$!
 
 # Go back to root
-cd /Users/dakshrathore/Laser-Engraving-or-QR-on-various-objects-and-data-fetching-using-scanner-main
+cd "$PROJECT_ROOT"
 
 echo ""
 echo "✅ Services Started!"
