@@ -226,7 +226,15 @@ const Scanning = () => {
   }, []);
 
   const handleScan = useCallback(async (uid: string) => {
-    if (!uid.trim()) {
+    // Enhanced mobile text processing
+    const processedUID = uid
+      .trim() // Remove whitespace
+      .replace(/\r\n|\r|\n/g, '') // Remove newlines
+      .replace(/\0/g, '') // Remove null characters
+      .replace(/\s+/g, ' ') // Normalize multiple spaces
+      .toUpperCase(); // Convert to uppercase for consistent matching
+    
+    if (!processedUID) {
       setError('Please enter a valid UID');
       return;
     }
@@ -236,7 +244,10 @@ const Scanning = () => {
     setScanResult(null);
 
     try {
-      console.log(`🔍 Attempting to scan UID: ${uid.trim()}`);
+      console.log(`� Original scanned text: "${uid}"`);
+      console.log(`🔍 Processed UID: "${processedUID}"`);
+      console.log(`🔍 UID length: ${processedUID.length}`);
+      console.log(`🔍 UID char codes:`, Array.from(processedUID).map(c => c.charCodeAt(0)));
       
       // Connect to the backend scanning service (same database as QR generation)
       const response = await fetch('https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/scan', {
@@ -245,7 +256,7 @@ const Scanning = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          uid: uid.trim()
+          uid: processedUID
         }),
         signal: AbortSignal.timeout(10000) // 10 second timeout
       });
@@ -257,7 +268,7 @@ const Scanning = () => {
         if (data.success) {
           console.log('✅ Scan successful:', data);
           setScanResult(data);
-          addToHistory(uid.trim(), data);
+          addToHistory(processedUID, data);
           setScannedUID('');
         } else {
           setError(data.error || 'Item not found in database');
@@ -269,16 +280,16 @@ const Scanning = () => {
       console.error('❌ Backend error details:', err);
       
       // Fallback to mock data when backend is not available
-      const mockResponse = await simulateScanAPI(uid.trim());
+      const mockResponse = await simulateScanAPI(processedUID);
       
       if (mockResponse.success) {
-        console.log('✅ Mock data found for UID:', uid.trim());
+        console.log('✅ Mock data found for UID:', processedUID);
         setScanResult(mockResponse);
-        addToHistory(uid.trim(), mockResponse);
+        addToHistory(processedUID, mockResponse);
         setScannedUID('');
       } else {
-        console.log('❌ UID not found in mock data:', uid.trim());
-        setError(mockResponse.error || 'UID not found');
+        console.log('❌ UID not found in mock data:', processedUID);
+        setError(`${mockResponse.error || 'UID not found'} - Processed: "${processedUID}"`);
       }
     }
     
@@ -363,30 +374,130 @@ const Scanning = () => {
       // Stop any existing stream
       stopCamera();
 
+      // Enhanced mobile camera constraints for better QR scanning
       const constraints = {
         video: {
           deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
           facingMode: selectedDeviceId ? undefined : { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920, min: 640 }, // Higher resolution for better QR reading
+          height: { ideal: 1080, min: 480 },
+          frameRate: { ideal: 30, min: 15 }, // Smooth video for mobile
+          aspectRatio: { ideal: 16/9 }, // Standard mobile aspect ratio
+          focusMode: 'continuous', // Continuous autofocus for mobile
+          exposureMode: 'continuous', // Auto exposure
+          whiteBalanceMode: 'continuous' // Auto white balance
         }
       } as MediaStreamConstraints;
 
+      console.log('📱 Starting mobile-optimized camera with constraints:', constraints);
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      
+        // Apply additional mobile video settings
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          // Apply advanced constraints for mobile devices
+          const capabilities = videoTrack.getCapabilities();
+          console.log('📱 Camera capabilities:', capabilities);
+          
+          const advancedConstraints: any = {};
+          
+          // Check for mobile camera capabilities safely
+          if ('focusMode' in capabilities && Array.isArray((capabilities as any).focusMode)) {
+            const focusModes = (capabilities as any).focusMode;
+            if (focusModes.includes('continuous')) {
+              advancedConstraints.focusMode = 'continuous';
+            }
+          }
+          
+          if ('exposureMode' in capabilities && Array.isArray((capabilities as any).exposureMode)) {
+            const exposureModes = (capabilities as any).exposureMode;
+            if (exposureModes.includes('continuous')) {
+              advancedConstraints.exposureMode = 'continuous';
+            }
+          }
+          
+          // Apply zoom settings for mobile if available
+          if ('zoom' in capabilities && (capabilities as any).zoom) {
+            const zoom = (capabilities as any).zoom;
+            if (zoom.min !== undefined && zoom.max !== undefined) {
+              // Set optimal zoom for QR scanning (slightly zoomed for better detail)
+              const optimalZoom = Math.min(zoom.max, Math.max(zoom.min, 1.2));
+              advancedConstraints.zoom = optimalZoom;
+            }
+          }
+          
+          if (Object.keys(advancedConstraints).length > 0) {
+            try {
+              await videoTrack.applyConstraints({ advanced: [advancedConstraints] });
+              console.log('📱 Applied advanced mobile constraints:', advancedConstraints);
+            } catch (advancedErr) {
+              console.warn('📱 Could not apply advanced constraints:', advancedErr);
+            }
+          }
+        }      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore - assigning MediaStream is supported at runtime
       videoRef.current.srcObject = stream;
 
-      // Start scanning
+      // Enhanced ZXing configuration for mobile QR scanning
+      const decodeHints = new Map();
+      decodeHints.set(2, [0]); // QR_CODE format
+      decodeHints.set(3, true); // TRY_HARDER for better mobile detection
+      decodeHints.set(4, true); // PURE_BARCODE for cleaner detection
+      
+      // Start scanning with mobile-optimized settings
       readerRef.current.decodeFromVideoDevice(
         selectedDeviceId || null,
         videoRef.current,
         (result, error) => {
           if (result) {
             const scannedText = result.getText();
-            console.log('📷 QR Code scanned:', scannedText);
-            handleScan(scannedText);
+            console.log('� Raw QR Code scanned:', `"${scannedText}"`);
+            console.log('📱 QR Code length:', scannedText.length);
+            console.log('📱 QR Code char codes:', Array.from(scannedText).map(c => c.charCodeAt(0)));
+            
+            // Mobile-specific text cleaning
+            const cleanedText = scannedText
+              .trim()
+              .replace(/\r\n|\r|\n/g, '') // Remove newlines
+              .replace(/\0/g, '') // Remove null characters
+              .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+              .normalize('NFC'); // Normalize Unicode
+              
+            console.log('📱 Cleaned QR Code for mobile:', `"${cleanedText}"`);
+            
+            // Mobile feedback: haptic + visual
+            if ('vibrate' in navigator) {
+              // Double vibration for success
+              navigator.vibrate([100, 50, 100]);
+            }
+            
+            // Add visual feedback for successful scan
+            if (videoRef.current) {
+              videoRef.current.style.border = '3px solid #4caf50';
+              setTimeout(() => {
+                if (videoRef.current) {
+                  videoRef.current.style.border = '2px solid #1976d2';
+                }
+              }, 500);
+            }
+            
+            // Mobile performance: reduce frame rate during processing
+            if (streamRef.current) {
+              const tracks = streamRef.current.getVideoTracks();
+              if (tracks.length > 0) {
+                const track = tracks[0];
+                const currentConstraints = track.getConstraints();
+                track.applyConstraints({
+                  ...currentConstraints,
+                  frameRate: { ideal: 15 } // Reduce during processing
+                }).catch(err => console.warn('Could not reduce frame rate:', err));
+              }
+            }
+            
+            handleScan(cleanedText);
+            
             // Stop camera after successful scan
             setTimeout(() => {
               stopCamera();
@@ -394,25 +505,36 @@ const Scanning = () => {
             }, 1000);
           }
           if (error && !(error instanceof NotFoundException)) {
-            console.warn('Scan error:', error);
+            console.warn('📱 Mobile scan error:', error);
           }
         }
       );
 
     } catch (err: any) {
-      console.error('Camera error:', err);
-      setError(`Camera error: ${err.message}`);
+      console.error('📱 Mobile camera error:', err);
+      setError(`Camera error: ${err.message}. Try using back camera for better QR scanning.`);
       setIsCameraActive(false);
     }
   }, [selectedDeviceId, stopCamera, handleScan]);
 
-  // Mock database matching the QR generation service
+  // Enhanced mock database with mobile-friendly matching
   const simulateScanAPI = async (uid: string): Promise<ScanResult> => {
     // Add realistic delay
     await new Promise(resolve => setTimeout(resolve, 800));
     
-    // Mock data that matches the generate QR page database structure
+    // Enhanced mobile text processing
+    const processedUID = uid
+      .trim()
+      .replace(/\r\n|\r|\n/g, '')
+      .replace(/\0/g, '')
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+    
+    console.log(`📱 Mock API searching for: "${processedUID}"`);
+    
+    // Enhanced mock data with mobile test UIDs
     const mockItems: Record<string, ScanResult> = {
+      // Original test data
       'PAD-V010-L2025-09-00001': {
         success: true,
         uid: 'PAD-V010-L2025-09-00001',
@@ -487,19 +609,95 @@ const Scanning = () => {
         location: 'Track A-5',
         note: 'Operational',
         created_at: '2025-09-23T10:30:00Z'
+      },
+      // Mobile-friendly test UIDs
+      'TEST-MOBILE-001': {
+        success: true,
+        uid: 'TEST-MOBILE-001',
+        component: 'TEST',
+        vendor: 'MOBILE',
+        lot: 'L2025-TEST',
+        mfg_date: '2025-09-30',
+        warranty_years: 1,
+        expiry_date: '2026-09-30',
+        current_status: 'Mobile Test',
+        status_updated_at: '2025-09-30T12:00:00Z',
+        location: 'Mobile Lab',
+        note: 'QR code mobile scanning test',
+        created_at: '2025-09-30T12:00:00Z'
+      },
+      'QR-TEST-123': {
+        success: true,
+        uid: 'QR-TEST-123',
+        component: 'QR',
+        vendor: 'TEST',
+        lot: 'L2025-QR',
+        mfg_date: '2025-09-30',
+        warranty_years: 2,
+        expiry_date: '2027-09-30',
+        current_status: 'QR Mobile Test',
+        status_updated_at: '2025-09-30T12:00:00Z',
+        location: 'Testing Lab',
+        note: 'QR code mobile device test',
+        created_at: '2025-09-30T12:00:00Z'
+      },
+      'MOBILE-QR-999': {
+        success: true,
+        uid: 'MOBILE-QR-999',
+        component: 'MOBILE',
+        vendor: 'QR',
+        lot: 'L2025-MOBILE',
+        mfg_date: '2025-09-30',
+        warranty_years: 1,
+        expiry_date: '2026-09-30',
+        current_status: 'Mobile Ready',
+        status_updated_at: '2025-09-30T12:00:00Z',
+        location: 'Mobile Testing',
+        note: 'Optimized for mobile QR scanning',
+        created_at: '2025-09-30T12:00:00Z'
       }
     };
 
-    const item = mockItems[uid];
+    // Try exact match first
+    let item = mockItems[processedUID];
+    
+    // If not found, try case-insensitive matching
+    if (!item) {
+      console.log(`📱 Exact match not found for: "${processedUID}"`);
+      console.log('📱 Available UIDs in mock data:', Object.keys(mockItems));
+      
+      const caseInsensitiveKey = Object.keys(mockItems).find(key => 
+        key.toLowerCase() === processedUID.toLowerCase()
+      );
+      
+      if (caseInsensitiveKey) {
+        item = mockItems[caseInsensitiveKey];
+        console.log(`✅ Found case-insensitive match: "${caseInsensitiveKey}"`);
+      }
+    }
+    
+    // Try partial matching for mobile scanning issues
+    if (!item) {
+      const partialMatch = Object.keys(mockItems).find(key => 
+        key.includes(processedUID) || processedUID.includes(key)
+      );
+      
+      if (partialMatch) {
+        item = mockItems[partialMatch];
+        console.log(`✅ Found partial match: "${partialMatch}" for "${processedUID}"`);
+      }
+    }
     
     if (item) {
+      console.log(`✅ Mock data found for: "${processedUID}"`);
       return item;
     }
     
+    console.log(`❌ No mock data found for: "${processedUID}"`);
     return {
       success: false,
-      uid,
-      error: 'UID not found in mock data'
+      uid: processedUID,
+      error: `UID not found in mock data. Searched for: "${processedUID}". Available mobile test UIDs: TEST-MOBILE-001, QR-TEST-123, MOBILE-QR-999, PAD-V010-L2025-09-00001`
     };
   };
 
@@ -715,19 +913,24 @@ const Scanning = () => {
                 </Box>
                 
                 {/* Camera Scanner */}
-                <Box sx={{ position: 'relative', mb: 2 }}>
+                <Box sx={{ position: 'relative', mb: 2 }} className="mobile-scanner-container">
                   <video
                     ref={videoRef}
+                    className="mobile-video"
                     style={{
                       width: '100%',
                       maxWidth: 500,
                       height: 'auto',
+                      minHeight: 250,
                       border: '2px solid #1976d2',
                       borderRadius: 8,
-                      backgroundColor: '#000'
+                      backgroundColor: '#000',
+                      objectFit: 'cover'
                     }}
                     autoPlay
                     playsInline
+                    muted
+                    controls={false}
                   />
                   
                   {isCameraActive && (
@@ -758,7 +961,20 @@ const Scanning = () => {
                   )}
                 </Box>
 
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Box 
+                  sx={{ 
+                    display: 'flex', 
+                    gap: 2, 
+                    flexWrap: 'wrap', 
+                    alignItems: 'center',
+                    flexDirection: { xs: 'column', md: 'row' },
+                    '& > *': { 
+                      minWidth: { xs: '100%', md: 'auto' },
+                      minHeight: { xs: 48, md: 'auto' }
+                    }
+                  }} 
+                  className="mobile-buttons"
+                >
                   {!isCameraActive ? (
                     <Button
                       variant="contained"
@@ -794,22 +1010,28 @@ const Scanning = () => {
                   </Button>
                 </Box>
                 
-                {/* Resource optimization info */}
+                {/* Mobile-optimized resource info */}
                 <Box sx={{ mt: 2 }}>
                   {isCameraActive ? (
                     <Alert severity="warning" sx={{ fontSize: '0.875rem' }}>
-                      📷 <strong>Camera Active:</strong> Click "Stop Camera" when done scanning to save device battery and resources.
+                      � <strong>Camera Active:</strong> Hold device steady, ensure good lighting, and position QR code clearly in frame. Click "Stop Camera" when done to save battery.
+                      <br />
+                      <strong>📷 Mobile Tips:</strong> Use back camera, avoid glare, keep QR code flat and well-lit.
                     </Alert>
                   ) : (
                     <Alert severity="info" sx={{ fontSize: '0.875rem' }}>
-                      🔋 <strong>Camera Stopped:</strong> Camera resources are optimized. Click "Start Camera" to begin scanning.
+                      🔋 <strong>Camera Stopped:</strong> Resources optimized. Click "Start Camera" to begin mobile QR scanning.
+                      <br />
+                      <strong>🧪 Test UIDs:</strong> TEST-MOBILE-001, QR-TEST-123, MOBILE-QR-999, PAD-V010-L2025-09-00001
                     </Alert>
                   )}
                 </Box>
 
                 {isCameraActive && (
                   <Alert severity="success" sx={{ mt: 2 }}>
-                    📱 <strong>Ready to Scan:</strong> Position the QR code within the camera view. The scanner will automatically detect and scan QR codes. Camera will stop after successful scan to save resources.
+                    📱 <strong>Mobile Scanner Ready:</strong> Hold device 6-12 inches from QR code. Ensure good lighting and steady hands. Scanner auto-detects and provides haptic feedback on success.
+                    <br />
+                    <strong>💡 Mobile Tips:</strong> Tap screen to focus if blurry, avoid shadows, keep QR code flat and centered.
                   </Alert>
                 )}
               </Box>
