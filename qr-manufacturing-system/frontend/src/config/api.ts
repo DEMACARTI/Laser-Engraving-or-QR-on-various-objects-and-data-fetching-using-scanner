@@ -8,3 +8,6 @@ function normalizeBase(url: string) {
 
 const envBase = (process.env.REACT_APP_API_BASE || process.env.REACT_APP_API_URL || '').trim();
 export const API_BASE = envBase ? normalizeBase(envBase) : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+
+// Scanning service configuration (now integrated with combined backend)
+export const SCANNING_API_BASE = envBase ? normalizeBase(envBase) : (process.env.NODE_ENV === 'development' ? 'http://localhost:5002' : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com');

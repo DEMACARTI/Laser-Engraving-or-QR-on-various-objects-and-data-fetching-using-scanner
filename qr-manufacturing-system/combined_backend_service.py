@@ -150,6 +150,54 @@ if not DISABLE_QR_FILES:
 else:
     logger.info("⚠️  QR file writing disabled (DISABLE_QR_FILES=true); images stored only in DB")
 
+# Role-based status permissions for scanning service
+ROLE_ALLOWED_STATUSES = {
+    "receiver": ["Received"],
+    "inspector": ["Inspected"],
+    "installer": ["Installed"],
+    "maintenance": ["Serviced", "Service Needed", "Replacement Needed", "Replaced", "Discarded"],
+    "admin": ["Manufactured", "Received", "Inspected", "Installed", "Serviced",
+              "Service Needed", "Replacement Needed", "Replaced", "Discarded"]
+}
+
+def get_employee_role(emp_id):
+    """Fetch employee role from database."""
+    conn = None
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT role FROM employees WHERE id=%s", (emp_id,))
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        logger.error(f"Error getting employee role: {e}")
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+def get_employee_info(emp_id):
+    """Fetch employee info from database."""
+    conn = None
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, username, full_name, role FROM employees WHERE id=%s", (emp_id,))
+        row = cur.fetchone()
+        return row
+    except Exception as e:
+        logger.error(f"Error getting employee info: {e}")
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
 # Global engraving state
 engraving_state = {
     "status": "idle",  # idle, running, paused, stopped
@@ -445,6 +493,71 @@ def get_qr_bytes(uid):
                 conn.close()
             except:
                 pass
+
+@app.route("/api/qr_batch_download", methods=["POST"])
+def download_qr_batch():
+    """Download multiple QR codes as a ZIP file."""
+    import zipfile
+    import tempfile
+    
+    try:
+        data = request.get_json()
+        uids = data.get('uids', [])
+        
+        if not uids:
+            return jsonify({"error": "No UIDs provided"}), 400
+        
+        # Create temporary ZIP file
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        conn = None
+        try:
+            conn = get_db_conn()
+            cur = conn.cursor()
+            
+            with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for uid in uids:
+                    try:
+                        # Get QR image from database
+                        cur.execute("SELECT qr_image FROM items WHERE uid=%s", (uid,))
+                        row = cur.fetchone()
+                        
+                        if row and row[0]:
+                            # Add image to ZIP
+                            zip_file.writestr(f"{uid}.png", row[0])
+                        else:
+                            logger.warning(f"QR image not found for UID: {uid}")
+                    except Exception as e:
+                        logger.error(f"Error adding {uid} to ZIP: {e}")
+                        continue
+            
+            # Send the ZIP file
+            return send_file(
+                temp_zip.name, 
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=f'qr_codes_{len(uids)}_items.zip'
+            )
+            
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except:
+                    pass
+                    
+    except Exception as e:
+        logger.error(f"Batch download error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        # Cleanup temp file after sending
+        try:
+            import os
+            if 'temp_zip' in locals():
+                os.unlink(temp_zip.name)
+        except:
+            pass
 
 @app.route("/items/manufactured", methods=["GET"])
 def get_manufactured_items():
@@ -803,31 +916,63 @@ def get_engraving_status():
 
 @app.route("/update_status", methods=["POST"])
 def update_item_status():
-    """Update item status."""
+    """Update item status with employee role validation."""
     conn = None
     try:
         data = request.get_json(force=True)
         uid = data.get("uid")
-        status = data.get("status")
-        location = data.get("location", "System")
+        new_status = data.get("new_status") or data.get("status")  # Support both field names
+        employee_id = data.get("employee_id")
+        location = data.get("location", "MobileApp")
         note = data.get("note", "")
         
-        if not uid or not status:
-            return jsonify({"error": "uid and status are required"}), 400
+        if not uid or not new_status:
+            return jsonify({"error": "uid and new_status are required"}), 400
+        
+        # If employee_id is provided, validate role-based permissions
+        if employee_id:
+            role = get_employee_role(employee_id)
+            if not role:
+                return jsonify({"error": "Invalid employee_id"}), 403
+            
+            allowed = ROLE_ALLOWED_STATUSES.get(role, [])
+            if new_status not in allowed:
+                return jsonify({
+                    "error": f"Role '{role}' not allowed to set status '{new_status}'",
+                    "allowed_statuses": allowed
+                }), 403
         
         conn = get_db_conn()
         cur = conn.cursor()
         
+        # Insert into statuses (audit log)
         cur.execute("""
-        INSERT INTO statuses (uid, status, location, note, updated_at)
-        VALUES (%s, %s, %s, %s, %s)
-        """, (uid, status, location, note, datetime.utcnow()))
+        INSERT INTO statuses (uid, status, location, note, updated_at, employee_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """, (uid, new_status, location, note, datetime.utcnow(), employee_id))
+        
+        # Update items.current_status if the table has this column
+        try:
+            cur.execute("UPDATE items SET current_status=%s WHERE uid=%s", (new_status, uid))
+        except mysql.connector.Error as e:
+            # If current_status column doesn't exist, just log and continue
+            if "Unknown column" in str(e):
+                logger.info("current_status column not found in items table, skipping update")
+            else:
+                raise
         
         conn.commit()
         
-        return jsonify({"ok": True, "message": "Status updated"})
+        response_data = {"ok": True, "uid": uid, "new_status": new_status}
+        if employee_id:
+            role = get_employee_role(employee_id)
+            response_data["role"] = role
+        
+        return jsonify(response_data)
         
     except Exception as e:
+        if conn:
+            conn.rollback()
         logger.error(f"Update status error: {e}")
         logger.error(traceback.format_exc())
         return jsonify({"error": f"Failed to update status: {str(e)}"}), 500
@@ -837,6 +982,29 @@ def update_item_status():
                 conn.close()
             except:
                 pass
+
+@app.route("/allowed_statuses", methods=["POST"])
+def get_allowed_statuses():
+    """Get allowed statuses for an employee based on their role."""
+    try:
+        data = request.get_json(force=True)
+        emp_id = data.get("employee_id")
+        
+        if not emp_id:
+            return jsonify({"error": "employee_id required"}), 400
+        
+        role = get_employee_role(emp_id)
+        if not role:
+            return jsonify({"error": "Invalid employee_id"}), 404
+        
+        allowed_statuses = ROLE_ALLOWED_STATUSES.get(role, [])
+        
+        return jsonify({"role": role, "allowed": allowed_statuses})
+        
+    except Exception as e:
+        logger.error(f"Get allowed statuses error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 # Scanning API Endpoints
 @app.route("/scan", methods=["POST"])

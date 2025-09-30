@@ -232,15 +232,120 @@ const QRGeneration: React.FC = () => {
     setError("");
   };
 
-  const downloadQRCode = (uid: string) => {
-    // Mock download functionality
-    console.log(`Downloading QR code for ${uid}`);
-    // In real implementation, this would download the actual QR code file
+  const downloadQRCode = async (uid: string) => {
+    try {
+      // Use the local backend API for development, fallback to remote for production
+      const apiBase = process.env.NODE_ENV === 'development' ? 'http://localhost:5002' : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+      const response = await fetch(`${apiBase}/api/qr/${uid}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download QR code: ${response.status}`);
+      }
+      
+      // Create blob from response
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${uid}.png`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      console.log(`✅ Downloaded QR code for ${uid}`);
+    } catch (error) {
+      console.error(`❌ Failed to download QR code for ${uid}:`, error);
+      setError(`Failed to download QR code for ${uid}. Please try again.`);
+    }
   };
 
-  const downloadAll = () => {
-    console.log('Downloading all QR codes as ZIP');
-    // In real implementation, this would create and download a ZIP file
+  const downloadAll = async () => {
+    if (results.length === 0) {
+      setError('No QR codes to download');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setProgress(0);
+      
+      const apiBase = process.env.NODE_ENV === 'development' ? 'http://localhost:5002' : 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
+      const uids = results.map(result => result.uid);
+      
+      // Try bulk download first (if available)
+      try {
+        const response = await fetch(`${apiBase}/api/qr_batch_download`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ uids }),
+        });
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `qr_codes_${results.length}_items.zip`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          console.log(`✅ Downloaded ${results.length} QR codes as ZIP`);
+          setProgress(100);
+          return;
+        } else {
+          console.warn('Bulk download not available, falling back to individual downloads');
+        }
+      } catch (bulkError) {
+        console.warn('Bulk download failed, falling back to individual downloads:', bulkError);
+      }
+      
+      // Fallback: download individual files
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        try {
+          const response = await fetch(`${apiBase}/api/qr/${result.uid}`);
+          
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${result.uid}.png`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            // Small delay between downloads to avoid overwhelming the browser
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } else {
+            console.warn(`Failed to download ${result.uid}: ${response.status}`);
+          }
+        } catch (err) {
+          console.warn(`Failed to download ${result.uid}:`, err);
+        }
+        
+        // Update progress
+        setProgress(((i + 1) / results.length) * 100);
+      }
+      
+      console.log(`✅ Downloaded ${results.length} QR codes individually`);
+    } catch (error) {
+      console.error('❌ Failed to download all QR codes:', error);
+      setError('Failed to download all QR codes. Please try again.');
+    } finally {
+      setLoading(false);
+      setTimeout(() => setProgress(0), 1000);
+    }
   };
 
   return (
@@ -267,6 +372,22 @@ const QRGeneration: React.FC = () => {
                     label="Component Type"
                     value={formData.component}
                     onChange={(e) => handleInputChange('component', e.target.value)}
+                    MenuProps={{
+                      PaperProps: {
+                        style: {
+                          maxHeight: 200,
+                          zIndex: 9999,
+                        },
+                      },
+                      anchorOrigin: {
+                        vertical: 'bottom',
+                        horizontal: 'left',
+                      },
+                      transformOrigin: {
+                        vertical: 'top',
+                        horizontal: 'left',
+                      },
+                    }}
                   >
                     {options.components.map(comp => (
                       <MenuItem key={comp} value={comp}>{comp}</MenuItem>
@@ -286,6 +407,22 @@ const QRGeneration: React.FC = () => {
                     label="Vendor"
                     value={formData.vendor}
                     onChange={(e) => handleInputChange('vendor', e.target.value)}
+                    MenuProps={{
+                      PaperProps: {
+                        style: {
+                          maxHeight: 200,
+                          zIndex: 9999,
+                        },
+                      },
+                      anchorOrigin: {
+                        vertical: 'bottom',
+                        horizontal: 'left',
+                      },
+                      transformOrigin: {
+                        vertical: 'top',
+                        horizontal: 'left',
+                      },
+                    }}
                   >
                     {options.vendors.map(vendor => (
                       <MenuItem key={vendor} value={vendor}>{vendor}</MenuItem>
@@ -305,6 +442,22 @@ const QRGeneration: React.FC = () => {
                     label="Lot Number"
                     value={formData.lot}
                     onChange={(e) => handleInputChange('lot', e.target.value)}
+                    MenuProps={{
+                      PaperProps: {
+                        style: {
+                          maxHeight: 200,
+                          zIndex: 9999,
+                        },
+                      },
+                      anchorOrigin: {
+                        vertical: 'bottom',
+                        horizontal: 'left',
+                      },
+                      transformOrigin: {
+                        vertical: 'top',
+                        horizontal: 'left',
+                      },
+                    }}
                   >
                     {options.lots.map(lot => (
                       <MenuItem key={lot} value={lot}>{lot}</MenuItem>

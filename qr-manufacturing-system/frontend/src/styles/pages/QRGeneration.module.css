@@ -6,11 +6,16 @@
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
   padding-bottom: max(24px, env(safe-area-inset-bottom));
+  /* Ensure dropdowns can be displayed */
+  overflow: visible;
 }
 
 .container {
   max-width: 1200px;
   margin: 0 auto;
+  /* Ensure dropdowns can overflow the container */
+  overflow: visible;
+  position: relative;
 }
 
 .offsetCenter {
@@ -45,6 +50,9 @@
   background: #ffffff;
   box-shadow: 0 1px 4px rgba(16, 24, 40, 0.05), 0 1px 1px rgba(16, 24, 40, 0.03);
   border: 1px solid rgba(16, 24, 40, 0.06);
+  /* Fix for dropdown menu display issues */
+  overflow: visible !important;
+  position: relative;
 }
 
 /* Keep the floating label above the open menu and avoid overlap */
@@ -54,6 +62,48 @@
 .paper :global(.Mui-focused) .MuiInputLabel-root,
 .paper :global(.MuiInputLabel-root.MuiInputLabel-shrink) {
   z-index: 2;
+}
+
+/* Ensure Select dropdown appears above other elements */
+.paper :global(.MuiSelect-root) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Fix Material-UI Select dropdown menu z-index and positioning */
+:global(.MuiPaper-root.MuiMenu-paper) {
+  z-index: 9999 !important;
+  box-shadow: 0 5px 5px -3px rgba(0,0,0,0.2), 0 8px 10px 1px rgba(0,0,0,0.14), 0 3px 14px 2px rgba(0,0,0,0.12) !important;
+}
+
+:global(.MuiModal-root .MuiBackdrop-root) {
+  z-index: 9998 !important;
+}
+
+/* Ensure FormControl containers don't clip dropdowns */
+:global(.MuiFormControl-root) {
+  overflow: visible !important;
+  position: relative;
+}
+
+/* Fix Material-UI Select component */
+:global(.MuiSelect-select) {
+  background-color: transparent !important;
+}
+
+/* Ensure Select dropdown is properly positioned */
+:global(.MuiSelect-root) {
+  position: relative;
+}
+
+/* Fix for Material-UI Popper positioning */
+:global(.MuiPopper-root) {
+  z-index: 9999 !important;
+}
+
+/* Additional fixes for dropdown visibility */
+:global(.MuiOutlinedInput-root) {
+  overflow: visible !important;
 }
 
 .section { margin-bottom: 24px; }

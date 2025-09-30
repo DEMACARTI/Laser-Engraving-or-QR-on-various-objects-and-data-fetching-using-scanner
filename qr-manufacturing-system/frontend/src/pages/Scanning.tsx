@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styles from '../styles/pages/Scanning.module.css';
+import { SCANNING_API_BASE } from '../config/api';
 import {
   Box,
   Paper,
@@ -27,7 +28,12 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  SelectChangeEvent
+  SelectChangeEvent,
+  RadioGroup,
+  Radio,
+  FormControlLabel as MuiFormControlLabel,
+  Autocomplete,
+  Snackbar
 } from '@mui/material';
 import {
   QrCodeScanner,
@@ -37,7 +43,10 @@ import {
   Refresh,
   CameraAlt,
   Videocam,
-  VideocamOff
+  VideocamOff,
+  Edit as EditIcon,
+  Person as PersonIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material';
 import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
 
@@ -62,6 +71,25 @@ interface ScanHistoryItem extends ScanResult {
   scannedAt: string;
 }
 
+interface Employee {
+  id: number;
+  username: string;
+  full_name: string;
+  role: string;
+}
+
+interface StatusUpdateRequest {
+  uid: string;
+  new_status: string;
+  employee_id: number;
+  note?: string;
+}
+
+interface AllowedStatusesResponse {
+  role: string;
+  allowed: string[];
+}
+
 const Scanning = () => {
   const [scannedUID, setScannedUID] = useState('');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
@@ -75,6 +103,26 @@ const Scanning = () => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [camerasLoading, setCamerasLoading] = useState(false);
+  
+  // Status Update States
+  const [statusUpdateDialogOpen, setStatusUpdateDialogOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [allowedStatuses, setAllowedStatuses] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [statusNote, setStatusNote] = useState<string>('');
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState<string>('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('info');
+  
+  // Mock employees data (in a real app, this would come from the backend)
+  const [employees] = useState<Employee[]>([
+    { id: 1, username: 'john_receiver', full_name: 'John Receiver', role: 'receiver' },
+    { id: 2, username: 'alice_inspector', full_name: 'Alice Inspector', role: 'inspector' },
+    { id: 3, username: 'bob_installer', full_name: 'Bob Installer', role: 'installer' },
+    { id: 4, username: 'carol_maintenance', full_name: 'Carol Maintenance', role: 'maintenance' },
+    { id: 5, username: 'admin_user', full_name: 'Admin User', role: 'admin' }
+  ]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -250,7 +298,7 @@ const Scanning = () => {
       console.log(`🔍 UID char codes:`, Array.from(processedUID).map(c => c.charCodeAt(0)));
       
       // Connect to the backend scanning service (same database as QR generation)
-      const response = await fetch('https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com/scan', {
+      const response = await fetch(`${SCANNING_API_BASE}/scan`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -733,12 +781,146 @@ const Scanning = () => {
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'manufactured': return 'primary';
+      case 'received': return 'info';
+      case 'inspected': return 'warning';
+      case 'installed': return 'success';
+      case 'serviced': return 'success';
+      case 'in service': return 'success';
+      case 'service needed': return 'warning';
+      case 'replacement needed': return 'error';
+      case 'replaced': return 'info';
+      case 'discarded': return 'error';
       case 'quality checked': return 'info';
       case 'shipped': return 'warning';
-      case 'installed': return 'success';
-      case 'in service': return 'success';
       default: return 'default';
     }
+  };
+
+  // Fetch allowed statuses for an employee
+  const fetchAllowedStatuses = async (empId: number): Promise<string[]> => {
+    try {
+      const response = await fetch(`${SCANNING_API_BASE}/allowed_statuses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ employee_id: empId }),
+      });
+      
+      if (response.ok) {
+        const data: AllowedStatusesResponse = await response.json();
+        return data.allowed;
+      } else {
+        console.error('Failed to fetch allowed statuses');
+        return [];
+      }
+    } catch (error) {
+      console.error('Error fetching allowed statuses:', error);
+      // Fallback to role-based statuses
+      const employee = employees.find(emp => emp.id === empId);
+      if (employee) {
+        const roleStatuses: Record<string, string[]> = {
+          receiver: ['Received'],
+          inspector: ['Inspected'],
+          installer: ['Installed'],
+          maintenance: ['Serviced', 'Service Needed', 'Replacement Needed', 'Replaced', 'Discarded'],
+          admin: ['Manufactured', 'Received', 'Inspected', 'Installed', 'Serviced', 'Service Needed', 'Replacement Needed', 'Replaced', 'Discarded']
+        };
+        return roleStatuses[employee.role] || [];
+      }
+      return [];
+    }
+  };
+
+  // Update item status
+  const updateItemStatus = async (updateData: StatusUpdateRequest): Promise<boolean> => {
+    try {
+      const response = await fetch(`${SCANNING_API_BASE}/update_status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.ok === true;
+      } else {
+        const errorData = await response.json();
+        console.error('Status update failed:', errorData);
+        setSnackbarMessage(errorData.error || 'Failed to update status');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      setSnackbarMessage('Network error while updating status');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return false;
+    }
+  };
+
+  // Handle opening status update dialog
+  const handleStatusUpdate = () => {
+    if (!scanResult) return;
+    setStatusUpdateDialogOpen(true);
+    setSelectedStatus('');
+    setStatusNote('');
+  };
+
+  // Handle employee selection
+  const handleEmployeeChange = async (employee: Employee | null) => {
+    setSelectedEmployee(employee);
+    if (employee) {
+      const statuses = await fetchAllowedStatuses(employee.id);
+      setAllowedStatuses(statuses);
+    } else {
+      setAllowedStatuses([]);
+    }
+    setSelectedStatus('');
+  };
+
+  // Handle status update submission
+  const handleStatusUpdateSubmit = async () => {
+    if (!scanResult || !selectedEmployee || !selectedStatus) return;
+    
+    setStatusUpdateLoading(true);
+    
+    const updateData: StatusUpdateRequest = {
+      uid: scanResult.uid,
+      new_status: selectedStatus,
+      employee_id: selectedEmployee.id,
+      note: statusNote.trim() || undefined
+    };
+    
+    const success = await updateItemStatus(updateData);
+    
+    if (success) {
+      // Update the scan result with new status
+      setScanResult(prev => prev ? {
+        ...prev,
+        current_status: selectedStatus,
+        status_updated_at: new Date().toISOString(),
+        note: statusNote.trim() || prev.note
+      } : null);
+      
+      // Update scan history
+      setScanHistory(prev => prev.map(item => 
+        item.uid === scanResult.uid 
+          ? { ...item, current_status: selectedStatus }
+          : item
+      ));
+      
+      setSnackbarMessage(`Status updated to "${selectedStatus}" successfully!`);
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      setStatusUpdateDialogOpen(false);
+    }
+    
+    setStatusUpdateLoading(false);
   };
 
   return (
@@ -1134,9 +1316,20 @@ const Scanning = () => {
                   <Grid item xs={12} sm={6}>
                     <Card variant="outlined">
                       <CardContent>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Status & Location
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Status & Location
+                          </Typography>
+                          <Button
+                            size="small"
+                            startIcon={<EditIcon />}
+                            onClick={handleStatusUpdate}
+                            variant="outlined"
+                            color="primary"
+                          >
+                            Update Status
+                          </Button>
+                        </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <Chip
                             label={scanResult.current_status}
@@ -1260,7 +1453,27 @@ const Scanning = () => {
       </Grid>
 
       {/* Manual Entry Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={dialogOpen} 
+        onClose={() => setDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            zIndex: 10000,
+            position: 'relative',
+          }
+        }}
+        BackdropProps={{
+          sx: {
+            zIndex: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          }
+        }}
+        sx={{
+          zIndex: 9999,
+        }}
+      >
         <DialogTitle>Manual UID Entry</DialogTitle>
         <DialogContent>
           <TextField
@@ -1283,6 +1496,186 @@ const Scanning = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Status Update Dialog */}
+      <Dialog 
+        open={statusUpdateDialogOpen} 
+        onClose={() => setStatusUpdateDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            zIndex: 10000,
+            position: 'relative',
+          }
+        }}
+        BackdropProps={{
+          sx: {
+            zIndex: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          }
+        }}
+        sx={{
+          zIndex: 9999,
+          '& .MuiDialog-container': {
+            zIndex: 10000,
+          },
+          '& .MuiDialog-paper': {
+            zIndex: 10001,
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AssignmentIcon color="primary" />
+          Update Status for {scanResult?.uid}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            {/* Current Status Display */}
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <Typography variant="subtitle2">Current Status</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                <Chip
+                  label={scanResult?.current_status || 'Unknown'}
+                  color={getStatusColor(scanResult?.current_status || '')}
+                  size="small"
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Last updated: {scanResult?.status_updated_at ? 
+                    new Date(scanResult.status_updated_at).toLocaleString() : 
+                    'Never'
+                  }
+                </Typography>
+              </Box>
+            </Alert>
+
+            {/* Employee Selection */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PersonIcon color="primary" />
+                Inspector/Employee Selection
+              </Typography>
+              
+              <Autocomplete
+                options={employees}
+                getOptionLabel={(option) => `${option.full_name} (${option.role})`}
+                value={selectedEmployee}
+                onChange={(_, newValue) => handleEmployeeChange(newValue)}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select Inspector/Employee"
+                    variant="outlined"
+                    helperText="Choose the employee who is updating the status"
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props}>
+                    <Box>
+                      <Typography variant="body1">{option.full_name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        @{option.username} • Role: {option.role.charAt(0).toUpperCase() + option.role.slice(1)} (ID: {option.id})
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              />
+            </Box>
+
+            {/* Status Selection */}
+            {selectedEmployee && allowedStatuses.length > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Select New Status
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Available statuses for {selectedEmployee.role}: {allowedStatuses.length} option(s)
+                </Typography>
+                
+                <FormControl component="fieldset">
+                  <RadioGroup
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                  >
+                    {allowedStatuses.map((status) => (
+                      <MuiFormControlLabel
+                        key={status}
+                        value={status}
+                        control={<Radio />}
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip
+                              label={status}
+                              color={getStatusColor(status)}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </Box>
+                        }
+                      />
+                    ))}
+                  </RadioGroup>
+                </FormControl>
+              </Box>
+            )}
+
+            {/* Notes */}
+            {selectedStatus && (
+              <Box sx={{ mb: 2 }}>
+                <TextField
+                  label="Notes (Optional)"
+                  multiline
+                  rows={3}
+                  fullWidth
+                  variant="outlined"
+                  value={statusNote}
+                  onChange={(e) => setStatusNote(e.target.value)}
+                  placeholder="Add any additional notes about this status update..."
+                  helperText="Optional notes will be saved with the status update"
+                />
+              </Box>
+            )}
+
+            {/* Employee Role Info */}
+            {selectedEmployee && (
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>{selectedEmployee.full_name}</strong> (@{selectedEmployee.username}) with role <strong>{selectedEmployee.role}</strong> is authorized to update status to: {allowedStatuses.join(', ')}
+                </Typography>
+              </Alert>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStatusUpdateDialogOpen(false)} disabled={statusUpdateLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleStatusUpdateSubmit} 
+            variant="contained" 
+            disabled={!selectedEmployee || !selectedStatus || statusUpdateLoading}
+            startIcon={statusUpdateLoading ? <CircularProgress size={16} /> : <EditIcon />}
+          >
+            {statusUpdateLoading ? 'Updating...' : 'Update Status'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Status Update Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setSnackbarOpen(false)} 
+          severity={snackbarSeverity} 
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
 
       <style>
         {`

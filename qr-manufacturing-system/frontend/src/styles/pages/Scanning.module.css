@@ -44,3 +44,43 @@
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 }
+
+/* Fix for Material-UI Dialog z-index issues */
+:global(.MuiDialog-root) {
+	z-index: 9999 !important;
+}
+
+:global(.MuiDialog-container) {
+	z-index: 10000 !important;
+}
+
+:global(.MuiDialog-paper) {
+	z-index: 10001 !important;
+	position: relative !important;
+}
+
+:global(.MuiBackdrop-root) {
+	z-index: 9998 !important;
+	background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Ensure dialog content is interactive */
+:global(.MuiDialogContent-root) {
+	position: relative !important;
+	z-index: 10002 !important;
+}
+
+:global(.MuiDialogActions-root) {
+	position: relative !important;
+	z-index: 10002 !important;
+}
+
+/* Fix for Autocomplete dropdown in dialogs */
+:global(.MuiAutocomplete-popper) {
+	z-index: 10003 !important;
+}
+
+/* Fix for Radio buttons and form controls in dialogs */
+:global(.MuiFormControl-root) {
+	position: relative !important;
+}
