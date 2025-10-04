@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styles from '../../styles/components/Navbar.module.css';
 import {
   AppBar,
@@ -13,12 +13,27 @@ import {
   Notifications as NotificationsIcon,
   AccountCircle,
 } from '@mui/icons-material';
+import NotificationDropdown from './NotificationDropdown';
+import { useAlerts } from '../../hooks/useAlerts';
 
 interface NavbarProps {
   onMenuClick: () => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
+  const [notificationAnchorEl, setNotificationAnchorEl] = useState<HTMLElement | null>(null);
+  const { badgeCount, criticalCount } = useAlerts();
+  
+  const handleNotificationClick = (event: React.MouseEvent<HTMLElement>) => {
+    setNotificationAnchorEl(event.currentTarget);
+  };
+
+  const handleNotificationClose = () => {
+    setNotificationAnchorEl(null);
+  };
+
+  const isNotificationOpen = Boolean(notificationAnchorEl);
+
   return (
     <div className={styles.root}>
       <AppBar 
@@ -62,6 +77,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
               size="large"
               aria-label="show new notifications"
               color="inherit"
+              onClick={handleNotificationClick}
               sx={{ 
                 mr: 1,
                 transition: 'filter 150ms ease, color 150ms ease',
@@ -71,7 +87,11 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                 },
               }}
             >
-              <Badge badgeContent={4} color="error">
+              <Badge 
+                badgeContent={badgeCount} 
+                color={criticalCount > 0 ? "error" : "warning"}
+                variant={badgeCount > 0 ? "standard" : "dot"}
+              >
                 <NotificationsIcon />
               </Badge>
             </IconButton>
@@ -94,6 +114,13 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
           </Box>
         </Toolbar>
       </AppBar>
+      
+      {/* Notification Dropdown */}
+      <NotificationDropdown
+        anchorEl={notificationAnchorEl}
+        open={isNotificationOpen}
+        onClose={handleNotificationClose}
+      />
     </div>
   );
 };

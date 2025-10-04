@@ -19,6 +19,7 @@ import {
   AutoFixHigh as PrecisionIcon,
   QrCodeScanner as ScannerIcon,
   Analytics as AnalyticsIcon,
+  Notifications as NotificationsIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 
@@ -34,6 +35,7 @@ const menuItems = [
   { text: 'Engraving', icon: <PrecisionIcon />, path: '/engraving' },
   { text: 'Scanning', icon: <ScannerIcon />, path: '/scanning' },
   { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
+  { text: 'AI Alerts', icon: <NotificationsIcon />, path: '/ai-alerts' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
 

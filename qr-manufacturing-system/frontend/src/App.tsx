@@ -14,6 +14,7 @@ import Inventory from './pages/Inventory';
 import Engraving from './pages/Engraving';
 import Scanning from './pages/Scanning';
 import Analytics from './pages/Analytics';
+import AIAlerts from './pages/AIAlerts';
 import Settings from './pages/Settings';
 import ClickSpark from './components/Effects/ClickSpark';
 
@@ -136,6 +137,7 @@ const App: React.FC = () => {
                   <Route path="/engraving" element={<Engraving />} />
                   <Route path="/scanning" element={<Scanning />} />
                   <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/ai-alerts" element={<AIAlerts />} />
                   <Route path="/settings" element={<Settings />} />
                   </Routes>
                 </ClickSpark>
