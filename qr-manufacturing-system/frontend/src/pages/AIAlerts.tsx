@@ -87,7 +87,7 @@ const AIAlerts: React.FC = () => {
   const location = useLocation();
   const highlightedRef = useRef<HTMLDivElement>(null);
 
-  const API_BASE = 'http://localhost:5002';
+  const API_BASE = 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
 
   const getPriorityColor = (priority: number) => {
     switch (priority) {

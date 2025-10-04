@@ -22,7 +22,7 @@ interface AlertSummary {
   critical_alerts: number;
 }
 
-const API_BASE = 'http://localhost:5002';
+const API_BASE = 'https://laser-engraving-or-qr-on-various-objects-gbbk.onrender.com';
 
 export const useAlerts = () => {
   const [alerts, setAlerts] = useState<AIAlert[]>([]);

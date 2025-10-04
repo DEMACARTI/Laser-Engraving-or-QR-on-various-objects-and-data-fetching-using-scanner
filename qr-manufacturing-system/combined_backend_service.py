@@ -64,6 +64,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import qrcode
 import io
+import json
 import mysql.connector
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -1195,6 +1196,475 @@ def root():
         logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
+# ============================================================================
+# AI ALERT SYSTEM ENDPOINTS
+# ============================================================================
+
+@app.route("/ai-alerts/generate", methods=["POST"])
+def generate_ai_alerts():
+    """Generate AI-powered alerts for components."""
+    conn = None
+    try:
+        data = request.get_json() or {}
+        uid = data.get('uid')  # Optional: generate alerts for specific UID
+        
+        # Basic alert generation without full AI model (fallback mode)
+        alerts = []
+        
+        conn = get_db_conn()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Generate expiry alerts
+        expiry_query = """
+        SELECT 
+            i.uid, i.component, i.vendor, i.lot, i.mfg_date, 
+            i.warranty_years, s.location,
+            DATEDIFF(DATE_ADD(i.mfg_date, INTERVAL i.warranty_years YEAR), CURDATE()) as days_to_expiry
+        FROM items i
+        LEFT JOIN (
+            SELECT uid, location,
+                   ROW_NUMBER() OVER (PARTITION BY uid ORDER BY updated_at DESC) as rn
+            FROM statuses
+        ) s ON i.uid = s.uid AND s.rn = 1
+        WHERE DATEDIFF(DATE_ADD(i.mfg_date, INTERVAL i.warranty_years YEAR), CURDATE()) <= 90
+        AND DATEDIFF(DATE_ADD(i.mfg_date, INTERVAL i.warranty_years YEAR), CURDATE()) > 0
+        """
+        
+        if uid:
+            expiry_query += " AND i.uid = %s"
+            cursor.execute(expiry_query, (uid,))
+        else:
+            cursor.execute(expiry_query)
+        
+        expiry_items = cursor.fetchall()
+        
+        for item in expiry_items:
+            days_to_expiry = item['days_to_expiry']
+            
+            if days_to_expiry <= 30:
+                alert_type = "expiry_critical"
+                priority = 4 if days_to_expiry <= 7 else 3
+                priority_name = "CRITICAL" if days_to_expiry <= 7 else "HIGH"
+                title = f"Component Expiry Critical - {item['component']}"
+            else:
+                alert_type = "expiry_warning"
+                priority = 2
+                priority_name = "MEDIUM"
+                title = f"Component Expiry Warning - {item['component']}"
+            
+            alert = {
+                'uid': item['uid'],
+                'alert_type': alert_type,
+                'priority': priority,
+                'priority_name': priority_name,
+                'title': title,
+                'description': f"Component {item['uid']} expires in {days_to_expiry} days.",
+                'component': item['component'],
+                'location': item['location'] or 'Unknown',
+                'predicted_date': None,
+                'recommendations': [
+                    "Schedule replacement",
+                    "Order new component",
+                    "Plan maintenance window",
+                    "Notify operations team"
+                ],
+                'metadata': {
+                    'days_to_expiry': days_to_expiry,
+                    'vendor': item['vendor'],
+                    'lot': item['lot'],
+                    'warranty_years': item['warranty_years']
+                },
+                'created_at': datetime.utcnow().isoformat()
+            }
+            alerts.append(alert)
+        
+        # Generate safety alerts for components needing service
+        safety_query = """
+        SELECT 
+            i.uid, i.component, s.status, s.location,
+            DATEDIFF(CURDATE(), i.mfg_date) as age_days
+        FROM items i
+        JOIN (
+            SELECT uid, status, location,
+                   ROW_NUMBER() OVER (PARTITION BY uid ORDER BY updated_at DESC) as rn
+            FROM statuses
+        ) s ON i.uid = s.uid AND s.rn = 1
+        WHERE s.status IN ('Service Needed', 'Replacement Needed', 'Failed')
+        """
+        
+        if uid:
+            safety_query += " AND i.uid = %s"
+            cursor.execute(safety_query, (uid,))
+        else:
+            cursor.execute(safety_query)
+        
+        safety_items = cursor.fetchall()
+        
+        for item in safety_items:
+            priority = 5 if item['status'] == 'Failed' else 4
+            priority_name = "EMERGENCY" if item['status'] == 'Failed' else "CRITICAL"
+            
+            alert = {
+                'uid': item['uid'],
+                'alert_type': 'safety_critical',
+                'priority': priority,
+                'priority_name': priority_name,
+                'title': f"Safety Critical - {item['component']} {item['status']}",
+                'description': f"Safety-critical component {item['uid']} status: {item['status']}. Immediate action required.",
+                'component': item['component'],
+                'location': item['location'] or 'Unknown',
+                'predicted_date': None,
+                'recommendations': [
+                    "IMMEDIATE ISOLATION OF COMPONENT" if item['status'] == 'Failed' else "Schedule urgent maintenance",
+                    "Emergency maintenance crew dispatch" if item['status'] == 'Failed' else "Maintenance crew dispatch",
+                    "Safety protocol activation",
+                    "Operations management notification",
+                    "Incident report filing"
+                ],
+                'metadata': {
+                    'current_status': item['status'],
+                    'safety_critical': True,
+                    'age_days': item['age_days']
+                },
+                'created_at': datetime.utcnow().isoformat()
+            }
+            alerts.append(alert)
+        
+        # Save alerts to database
+        if alerts:
+            # Create alerts table if it doesn't exist
+            create_table_query = """
+            CREATE TABLE IF NOT EXISTS ai_alerts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                uid VARCHAR(255),
+                alert_type VARCHAR(50),
+                priority INT,
+                title VARCHAR(500),
+                description TEXT,
+                component VARCHAR(100),
+                location VARCHAR(200),
+                predicted_date DATETIME,
+                recommendations JSON,
+                metadata JSON,
+                created_at DATETIME,
+                acknowledged BOOLEAN DEFAULT FALSE,
+                acknowledged_by VARCHAR(100),
+                acknowledged_at DATETIME,
+                resolved BOOLEAN DEFAULT FALSE,
+                resolved_at DATETIME,
+                INDEX idx_uid (uid),
+                INDEX idx_alert_type (alert_type),
+                INDEX idx_priority (priority),
+                INDEX idx_created_at (created_at)
+            )
+            """
+            cursor.execute(create_table_query)
+            
+            # Insert alerts
+            insert_query = """
+            INSERT INTO ai_alerts 
+            (uid, alert_type, priority, title, description, component, location, 
+             predicted_date, recommendations, metadata, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            title = VALUES(title),
+            description = VALUES(description),
+            recommendations = VALUES(recommendations),
+            metadata = VALUES(metadata)
+            """
+            
+            for alert in alerts:
+                cursor.execute(insert_query, (
+                    alert['uid'],
+                    alert['alert_type'],
+                    alert['priority'],
+                    alert['title'],
+                    alert['description'],
+                    alert['component'],
+                    alert['location'],
+                    None,  # predicted_date
+                    json.dumps(alert['recommendations']),
+                    json.dumps(alert['metadata']),
+                    datetime.utcnow()
+                ))
+            
+            conn.commit()
+        
+        # Generate summary
+        summary = {
+            'total_alerts': len(alerts),
+            'critical_count': len([a for a in alerts if a['priority'] >= 4]),
+            'by_priority': {},
+            'by_type': {}
+        }
+        
+        for alert in alerts:
+            priority_name = alert['priority_name']
+            alert_type = alert['alert_type']
+            
+            summary['by_priority'][priority_name] = summary['by_priority'].get(priority_name, 0) + 1
+            summary['by_type'][alert_type] = summary['by_type'].get(alert_type, 0) + 1
+        
+        return jsonify({
+            'success': True,
+            'alerts': alerts,
+            'count': len(alerts),
+            'summary': summary
+        })
+    
+    except Exception as e:
+        logger.error(f"Error generating AI alerts: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+@app.route("/ai-alerts/list", methods=["GET"])
+def list_ai_alerts():
+    """List all AI alerts with optional filtering."""
+    conn = None
+    try:
+        # Query parameters
+        priority = request.args.get('priority')
+        alert_type = request.args.get('alert_type')
+        component = request.args.get('component')
+        acknowledged = request.args.get('acknowledged')
+        resolved = request.args.get('resolved')
+        limit = request.args.get('limit', 100, type=int)
+        
+        conn = get_db_conn()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Build query with filters
+        where_conditions = []
+        params = []
+        
+        if priority:
+            where_conditions.append("priority = %s")
+            params.append(priority)
+        
+        if alert_type:
+            where_conditions.append("alert_type = %s")
+            params.append(alert_type)
+        
+        if component:
+            where_conditions.append("component = %s")
+            params.append(component)
+        
+        if acknowledged is not None:
+            where_conditions.append("acknowledged = %s")
+            params.append(acknowledged.lower() == 'true')
+        
+        if resolved is not None:
+            where_conditions.append("resolved = %s")
+            params.append(resolved.lower() == 'true')
+        
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        
+        query = f"""
+        SELECT * FROM ai_alerts
+        WHERE {where_clause}
+        ORDER BY priority DESC, created_at DESC
+        LIMIT %s
+        """
+        params.append(limit)
+        
+        cursor.execute(query, params)
+        alerts = cursor.fetchall()
+        
+        # Convert JSON fields back to Python objects and format dates
+        for alert in alerts:
+            if alert['recommendations']:
+                alert['recommendations'] = json.loads(alert['recommendations'])
+            if alert['metadata']:
+                alert['metadata'] = json.loads(alert['metadata'])
+            
+            # Add priority name
+            priority_names = {5: 'EMERGENCY', 4: 'CRITICAL', 3: 'HIGH', 2: 'MEDIUM', 1: 'LOW'}
+            alert['priority_name'] = priority_names.get(alert['priority'], 'UNKNOWN')
+            
+            # Convert datetime objects to strings
+            for field in ['created_at', 'predicted_date', 'acknowledged_at', 'resolved_at']:
+                if alert[field]:
+                    alert[field] = alert[field].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'alerts': alerts,
+            'count': len(alerts)
+        })
+    
+    except Exception as e:
+        logger.error(f"Error listing AI alerts: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+@app.route("/ai-alerts/<int:alert_id>/acknowledge", methods=["POST"])
+def acknowledge_ai_alert(alert_id):
+    """Acknowledge an AI alert."""
+    conn = None
+    try:
+        data = request.get_json() or {}
+        acknowledged_by = data.get('acknowledged_by', 'System')
+        
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        UPDATE ai_alerts 
+        SET acknowledged = TRUE, acknowledged_by = %s, acknowledged_at = NOW()
+        WHERE id = %s
+        """, (acknowledged_by, alert_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({
+                'success': False,
+                'error': 'Alert not found'
+            }), 404
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Alert {alert_id} acknowledged successfully'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error acknowledging AI alert: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+@app.route("/ai-alerts/<int:alert_id>/resolve", methods=["POST"])
+def resolve_ai_alert(alert_id):
+    """Mark an AI alert as resolved."""
+    conn = None
+    try:
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        UPDATE ai_alerts 
+        SET resolved = TRUE, resolved_at = NOW()
+        WHERE id = %s
+        """, (alert_id,))
+        
+        if cursor.rowcount == 0:
+            return jsonify({
+                'success': False,
+                'error': 'Alert not found'
+            }), 404
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Alert {alert_id} resolved successfully'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error resolving AI alert: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+@app.route("/ai-alerts/summary", methods=["GET"])
+def ai_alerts_summary():
+    """Get summary statistics of AI alerts."""
+    conn = None
+    try:
+        conn = get_db_conn()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get overall statistics
+        cursor.execute("""
+        SELECT 
+            COUNT(*) as total_alerts,
+            SUM(CASE WHEN acknowledged = FALSE THEN 1 ELSE 0 END) as unacknowledged,
+            SUM(CASE WHEN resolved = FALSE THEN 1 ELSE 0 END) as unresolved,
+            SUM(CASE WHEN priority >= 4 THEN 1 ELSE 0 END) as critical_alerts
+        FROM ai_alerts
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        """)
+        
+        summary = cursor.fetchone()
+        
+        # Get alerts by type
+        cursor.execute("""
+        SELECT alert_type, COUNT(*) as count
+        FROM ai_alerts
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY alert_type
+        ORDER BY count DESC
+        """)
+        
+        by_type = cursor.fetchall()
+        
+        # Get alerts by priority
+        cursor.execute("""
+        SELECT priority, COUNT(*) as count
+        FROM ai_alerts
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY priority
+        ORDER BY priority DESC
+        """)
+        
+        by_priority = cursor.fetchall()
+        
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'by_type': by_type,
+            'by_priority': by_priority,
+            'period': 'Last 30 days'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error getting AI alerts summary: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
 def cleanup_worker():
     """Clean up worker thread on exit."""
     global worker_stop_event, worker_thread, worker_running
@@ -1233,6 +1703,7 @@ if __name__ == "__main__":
             print("   - Engraving: http://localhost:5002/engrave/start")
             print("   - Scanning: http://localhost:5002/scan")
             print("   - Inventory: http://localhost:5002/inventory/items")
+            print("   - AI Alerts: http://localhost:5002/ai-alerts/generate")
             print("")
             
             # Start Flask with better error handling
